@@ -1,0 +1,3631 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tooling Tracker Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+            color: white;
+            padding: 20px 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .header .subtitle {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+
+        .container {
+            display: flex;
+            min-height: calc(100vh - 80px);
+        }
+
+        .sidebar {
+            width: 280px;
+            background: white;
+            padding: 20px;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+            overflow-y: auto;
+            max-height: calc(100vh - 80px);
+        }
+
+        .sidebar h3 {
+            font-size: 16px;
+            color: #1e3a8a;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #3b82f6;
+        }
+
+        .filter-group {
+            margin-bottom: 20px;
+        }
+
+        .filter-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 8px;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 13px;
+            transition: border-color 0.3s;
+        }
+
+        .filter-group select:focus,
+        .filter-group input:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .filter-buttons button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-apply {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-apply:hover {
+            background: #2563eb;
+        }
+
+        .btn-reset {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .btn-reset:hover {
+            background: #d1d5db;
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 20px 30px;
+            overflow-x: auto;
+        }
+
+        .stats-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            text-align: center;
+        }
+
+        .stat-card h4 {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #1e3a8a;
+        }
+
+        .stat-card.green .value {
+            color: #10b981;
+        }
+
+        .stat-card.yellow .value {
+            color: #f59e0b;
+        }
+
+        .stat-card.red .value {
+            color: #ef4444;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+
+        .table-header {
+            padding: 20px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .table-header h3 {
+            font-size: 18px;
+            color: #1e3a8a;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .search-box input {
+            padding: 8px 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            width: 250px;
+            font-size: 13px;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            max-height: calc(100vh - 350px);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        thead {
+            background: #1e3a8a;
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        th {
+            padding: 12px 10px;
+            text-align: left;
+            font-weight: 600;
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        th:hover {
+            background: #2563eb;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #e2e8f0;
+            transition: background-color 0.2s;
+        }
+
+        tbody tr:hover {
+            background: #f1f5f9;
+        }
+
+        td {
+            padding: 10px;
+            white-space: nowrap;
+        }
+
+        .status-green {
+            background: #10b981;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .status-yellow {
+            background: #f59e0b;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .status-red {
+            background: #ef4444;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .build-complete-yes {
+            background: #10b981;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .build-complete-no {
+            background: #6b7280;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .build-complete-pending {
+            background: #f59e0b;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .stats-cards {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .charts-section {
+            margin-bottom: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .charts-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+
+        .import-history {
+            margin-bottom: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .import-history table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .import-history th,
+        .import-history td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+        }
+
+        .file-upload input[type="file"] {
+            display: none;
+        }
+
+        .file-upload label {
+            display: inline-block;
+            padding: 12px 30px;
+            background: #3b82f6;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .file-upload label:hover {
+            background: #2563eb;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .sort-icon {
+            display: inline-block;
+            margin-left: 5px;
+            font-size: 10px;
+        }
+
+        @media (max-width: 1200px) {
+            .sidebar {
+                width: 220px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                max-height: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
+            <div>
+                <h1 id="header-title">Tooling Status</h1>
+                <div class="subtitle" id="header-subtitle">CTE Weekly Tooling Update Dashboard</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+                <label for="language-toggle" id="language-label" style="font-size:13px;font-weight:600;">Language</label>
+                <select id="language-toggle" onchange="setLanguage(this.value)" style="padding:6px 8px;border-radius:6px;border:none;font-size:12px;">
+                    <option value="en">English</option>
+                    <option value="zh">中文</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="sidebar">
+            <h3 id="filters-title">Filters</h3>
+            
+            <div class="filter-group">
+                <label for="filter-lob" id="label-filter-lob">LOB</label>
+                <select id="filter-lob" multiple size="1">
+                    <option value="">All</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="filter-program" id="label-filter-program">Program</label>
+                <select id="filter-program" multiple size="1">
+                    <option value="">All</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="filter-phase" id="label-filter-phase">Phase</label>
+                <select id="filter-phase" multiple size="1">
+                    <option value="">All</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="filter-part-type" id="label-filter-part-type">Part Type</label>
+                <select id="filter-part-type" multiple size="1">
+                    <option value="">All</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="filter-status" id="label-filter-status">Status (R.Y.G)</label>
+                <select id="filter-status" multiple size="1">
+                    <option value="">All</option>
+                    <option value="R">Red</option>
+                    <option value="Y">Yellow</option>
+                    <option value="G">Green</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="filter-build-complete" id="label-filter-build-complete">Build Complete Status</label>
+                <select id="filter-build-complete" multiple size="1">
+                    <option value="">All</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="filter-supplier" id="label-filter-supplier">Tooling Supplier</label>
+                <select id="filter-supplier" multiple size="1">
+                    <option value="">All</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="filter-fe-engineer" id="label-filter-fe-engineer">Front End Engineer</label>
+                <select id="filter-fe-engineer" multiple size="1">
+                    <option value="">All</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="filter-dev-engineer" id="label-filter-dev-engineer">Development Engineer</label>
+                <select id="filter-dev-engineer" multiple size="1">
+                    <option value="">All</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="filter-dgp" id="label-filter-dgp">DGP/NON-DGP</label>
+                <select id="filter-dgp" multiple size="1">
+                    <option value="">All</option>
+                </select>
+            </div>
+
+            <div class="filter-buttons">
+                <button class="btn-reset" id="btn-reset" onclick="resetFilters()">Reset</button>
+                <button class="btn-apply" id="btn-apply" onclick="applyFilters()">Apply</button>
+                <button id="btn-export" onclick="exportToExcel()" style="background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; padding: 10px; flex: 1;">Export Excel</button>
+                <button id="btn-report" onclick="downloadDashboardReport()" style="background: #1e3a8a; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; padding: 10px; flex: 1;">Dashboard PDF</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="file-upload">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <label for="file-input" id="upload-label" style="margin: 0; font-weight: 600; color: #333;">📁 Upload</label>
+                    <div id="last-update-time" style="font-size: 12px; color: #666; font-weight: 500;">Last Update: --</div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 15px;">
+                    <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFileUpload(event)" multiple style="padding: 6px 12px; font-size: 12px;">
+                    <input type="file" id="folder-input" webkitdirectory directory multiple accept=".xlsx,.xls" onchange="handleFolderUpload(event)" style="padding: 6px 12px; font-size: 12px;">
+                    <button id="btn-clear" onclick="clearAllData()" style="padding: 8px 16px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">Clear</button>
+                </div>
+                <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center; gap: 15px;">
+                    <div style="flex: 1;">
+                        <p id="file-name" style="margin: 0; color: #666; font-size: 13px;"></p>
+                        <p id="upload-progress" style="margin: 5px 0 0 0; color: #3b82f6; font-size: 13px; font-weight: 600;"></p>
+                    </div>
+                    <div style="display: flex; gap: 10px; flex: 2;">
+                        <button id="btn-total" onclick="filterByTotal()" style="flex: 1; padding: 16px 24px; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3); white-space: nowrap;">📊 Total</button>
+                        <button id="btn-npi" onclick="filterByNPI()" style="flex: 1; padding: 16px 24px; background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3); white-space: nowrap;">🆕 NPI</button>
+                        <button id="btn-sustain" onclick="filterBySustain()" style="flex: 1; padding: 16px 24px; background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3); white-space: nowrap;">🔄 Sustain</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="import-history">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <h3 id="import-history-title" style="color: #1e3a8a; margin: 0;">Import History</h3>
+                    <span id="import-history-count" style="font-size: 12px; color: #666;">0 imports</span>
+                </div>
+                <div style="max-height: 180px; overflow-y: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Import ID</th>
+                                <th id="import-col-file">File</th>
+                                <th id="import-col-date">Imported At</th>
+                                <th id="import-col-rows">Rows</th>
+                                <th id="import-col-action">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="import-history-body">
+                            <tr><td colspan="5" id="import-empty-text" style="color: #666;">No imports yet.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="stats-cards">
+                <div class="stat-card">
+                    <h4 id="stat-title-total">Total Records</h4>
+                    <div class="value" id="stat-total">0</div>
+                </div>
+                <div class="stat-card green">
+                    <h4 id="stat-title-green">Green Status</h4>
+                    <div class="value" id="stat-green">0</div>
+                </div>
+                <div class="stat-card yellow" onclick="navigateToDetailPageByStatus('Yellow')" style="cursor: pointer;">
+                    <h4 id="stat-title-yellow">Yellow Status</h4>
+                    <div class="value" id="stat-yellow">0</div>
+                </div>
+                <div class="stat-card red" onclick="navigateToDetailPageByStatus('Red')" style="cursor: pointer;">
+                    <h4 id="stat-title-red">Red Status</h4>
+                    <div class="value" id="stat-red">0</div>
+                </div>
+            </div>
+
+            <div class="charts-section" id="charts-section" style="display: none;">
+                <h3 id="charts-title" style="margin-bottom: 15px; color: #333;">Data Visualization</h3>
+                <div class="charts-container">
+                    <div class="chart-wrapper">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="statusByPartTypeChart"></canvas>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="statusBySupplierChart"></canvas>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="statusTrendChart"></canvas>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="supplierRiskTrendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-container" style="display: none;">
+                <div class="table-header">
+                    <h3 id="table-title" onclick="navigateToDetailPage()" style="cursor: pointer; text-decoration: underline; color: #3b82f6;">Tooling Data Table</h3>
+                    <div class="search-box">
+                        <input type="text" id="search-input" placeholder="Search..." onkeyup="searchTable()">
+                    </div>
+                </div>
+                <div class="table-wrapper">
+                    <table id="data-table">
+                        <thead>
+                            <tr id="table-header"></tr>
+                        </thead>
+                        <tbody id="table-body"></tbody>
+                    </table>
+                    <div id="loading" class="loading" style="display: none;">
+                        <span id="loading-text">Loading data...</span>
+                    </div>
+                    <div id="no-data" class="no-data" style="display: none;">
+                        <span id="no-data-text">No data available. Please upload an Excel file.</span>
+                    </div>
+                    <div id="pagination" style="display: none; padding: 15px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                        <div id="pagination-summary" style="font-size: 13px; color: #666;">
+                            Showing <span id="pagination-start">0</span> - <span id="pagination-end">0</span> of <span id="pagination-total">0</span> records
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <button onclick="changePage(-1)" id="prev-btn" style="padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Previous</button>
+                            <span id="page-info" style="font-size: 13px; color: #333; font-weight: 600;">Page 1 of 1</span>
+                            <button onclick="changePage(1)" id="next-btn" style="padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Next</button>
+                            <select id="rows-per-page" onchange="changeRowsPerPage()" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;">
+                                <option value="50">50 rows</option>
+                                <option value="100" selected>100 rows</option>
+                                <option value="200">200 rows</option>
+                                <option value="500">500 rows</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allData = [];
+        let filteredData = [];
+        let sortColumn = -1;
+        let sortDirection = 'asc';
+        let currentPage = 1;
+        let rowsPerPage = 100;
+        let importHistory = [];
+        let currentLanguage = 'en';
+
+        const translations = {
+            en: {
+                headerTitle: 'Tooling Status', headerSubtitle: 'CTE Weekly Tooling Update Dashboard', languageLabel: 'Language',
+                filtersTitle: 'Filters', labelLob: 'LOB', labelProgram: 'Program', labelPhase: 'Phase', labelPartType: 'Part Type',
+                labelStatus: 'Status (R.Y.G)', labelBuildComplete: 'Build Complete Status', labelSupplier: 'Tooling Supplier',
+                labelFeEngineer: 'Front End Engineer', labelDevEngineer: 'Development Engineer', labelDgp: 'DGP/NON-DGP',
+                reset: 'Reset', apply: 'Apply', exportExcel: 'Export Excel', dashboardPdf: 'Dashboard PDF', upload: '📁 Upload', clear: 'Clear',
+                importHistoryTitle: 'Import History', importFile: 'File', importDate: 'Imported At', importRows: 'Rows', importAction: 'Action',
+                importEmpty: 'No imports yet.', importCount: '{count} imports', delete: 'Delete',
+                totalRecords: 'Total Records', greenStatus: 'Green Status', yellowStatus: 'Yellow Status', redStatus: 'Red Status',
+                chartsTitle: 'Data Visualization', tableTitle: 'Tooling Data Table', loadingData: 'Loading data...',
+                noData: 'No data available. Please upload an Excel file.', searchPlaceholder: 'Search...', previous: 'Previous', next: 'Next',
+                rows50: '50 rows', rows100: '100 rows', rows200: '200 rows', rows500: '500 rows',
+                btnTotal: '📊 Total', btnNpi: '🆕 NPI', btnSustain: '🔄 Sustain', btnNpiTool: '📋 NPI Tool', btnSustainTool: '📋 Sustain Tool',
+                lastUpdatePrefix: 'Last Update', loadedFromDatabase: 'Loaded {count} records from database',
+                paginationSummary: 'Showing <span id="pagination-start">{start}</span> - <span id="pagination-end">{end}</span> of <span id="pagination-total">{total}</span> records',
+                pageInfo: 'Page {current} of {total}', clearPrompt: 'Enter password to clear all data:', incorrectPassword: 'Incorrect password',
+                noExcelSelected: 'No Excel files selected.', uploadingFiles: 'Uploading {count} file(s) to server...',
+                selectedFiles: 'Selected {count} Excel file(s)',
+                uploadCompleted: 'Completed: {files} files, {rows} records added', uploadFailed: 'Upload failed: {message}',
+                deleteImportConfirm: "Delete import #{id} from '{file}'? This removes all rows from that import.", deleteFailed: 'Delete failed: {message}',
+                noDataToExport: 'No data to export', noDataToReport: 'No data available to generate a report.',
+                reportGenerating: 'Generating PDF...', reportFailed: 'Failed to generate dashboard PDF: {message}',
+                clearFailed: 'Failed to clear data: {message}',
+                noRecordsSelectedStatus: 'No records found with the selected status.',
+                noRecordsStatusProgram: 'No records found with the selected status and program.',
+                noRecordsStatusPartType: 'No records found with the selected status and part type.',
+                noRecordsStatusSupplier: 'No records found with the selected status and supplier.',
+                noProgramSelected: 'Please select a Program first.',
+                noDataToDisplay: 'No data to display. Please upload data first.',
+                noRecordsProgramPhase: 'No records found with the selected program and phase != sustain.',
+                errorTryAgain: 'Error saving data. Please try again.',
+                errorNavigateDetail: 'Error navigating to detail page. Data may be too large.',
+                errorShowAll: 'Error showing all data.',
+                chartNotFound: 'Chart not found',
+                errorSavingChart: 'Error saving chart data. Please try again.',
+                errorNavigateChart: 'Error navigating to enlarged chart.',
+                phaseColumnNotFound: 'Phase column not found in data.',
+                noRecordsSustain: 'No records found with phase = sustain.',
+                errorFilteringSustain: 'Error filtering by sustain.',
+                noRecordsSustainProgram: 'No records found with the selected program and phase = sustain.',
+                errorNavigateSustainDetail: 'Error navigating to sustain detail page.',
+                noRecordsNpi: 'No records found with phase != sustain.',
+                errorFilteringNpi: 'Error filtering by NPI.',
+                errorLoadingData: 'Error loading data: {message}', errorSavingSession: 'Error saving data. Data will only be available for this session.',
+                chartStatus: 'Tooling Status', chartByProgram: 'Status by Program', chartByPartType: 'Status by Part Type',
+                chartBySupplier: 'Status by Production Supplier', chartStatusTrend: 'Status Trend Over Time',
+                chartSupplierTrend: 'Supplier Risk Trend (% Red + Yellow)',
+                autoLoadBtn: '🔄 Auto Load', autoLoading: 'Auto-loading...', autoLoadSuccess: 'Auto-loaded {files} files ({rows} rows)', autoLoadFailed: 'Auto-load failed: {message}'
+            },
+            zh: {
+                headerTitle: '工装状态', headerSubtitle: 'CTE 每周工装更新看板', languageLabel: '语言',
+                filtersTitle: '筛选器', labelLob: 'LOB', labelProgram: '项目', labelPhase: '阶段', labelPartType: '零件类型',
+                labelStatus: '状态 (R.Y.G)', labelBuildComplete: 'Build Complete 状态', labelSupplier: '工装供应商',
+                labelFeEngineer: '前端工程师', labelDevEngineer: '开发工程师', labelDgp: 'DGP/非DGP',
+                reset: '重置', apply: '应用', exportExcel: '导出 Excel', dashboardPdf: '看板 PDF', upload: '📁 上传', clear: '清除',
+                importHistoryTitle: '导入历史', importFile: '文件', importDate: '导入时间', importRows: '行数', importAction: '操作',
+                importEmpty: '暂无导入记录。', importCount: '{count} 次导入', delete: '删除',
+                totalRecords: '总记录数', greenStatus: '绿色状态', yellowStatus: '黄色状态', redStatus: '红色状态',
+                chartsTitle: '数据可视化', tableTitle: '工装数据表', loadingData: '正在加载数据...',
+                noData: '暂无数据，请上传 Excel 文件。', searchPlaceholder: '搜索...', previous: '上一页', next: '下一页',
+                rows50: '50 行', rows100: '100 行', rows200: '200 行', rows500: '500 行',
+                btnTotal: '📊 总览', btnNpi: '🆕 NPI', btnSustain: '🔄 Sustain', btnNpiTool: '📋 NPI 明细', btnSustainTool: '📋 Sustain 明细',
+                lastUpdatePrefix: '最后更新', loadedFromDatabase: '已从数据库加载 {count} 条记录',
+                paginationSummary: '显示 <span id="pagination-start">{start}</span> - <span id="pagination-end">{end}</span> / 共 <span id="pagination-total">{total}</span> 条记录',
+                pageInfo: '第 {current} 页 / 共 {total} 页', clearPrompt: '请输入密码以清除所有数据：', incorrectPassword: '密码错误',
+                noExcelSelected: '未选择 Excel 文件。', uploadingFiles: '正在上传 {count} 个文件到服务器...',
+                selectedFiles: '已选择 {count} 个 Excel 文件',
+                uploadCompleted: '完成：{files} 个文件，新增 {rows} 条记录', uploadFailed: '上传失败：{message}',
+                deleteImportConfirm: "删除导入批次 #{id}（文件: '{file}'）？此操作会删除该批次所有数据。", deleteFailed: '删除失败：{message}',
+                noDataToExport: '没有可导出的数据', noDataToReport: '当前没有可用于报告的数据。',
+                reportGenerating: '正在生成 PDF...', reportFailed: '生成看板 PDF 失败：{message}',
+                clearFailed: '清除数据失败：{message}',
+                noRecordsSelectedStatus: '未找到符合所选状态的记录。',
+                noRecordsStatusProgram: '未找到符合所选状态和项目的记录。',
+                noRecordsStatusPartType: '未找到符合所选状态和零件类型的记录。',
+                noRecordsStatusSupplier: '未找到符合所选状态和供应商的记录。',
+                noProgramSelected: '请先选择 Program。',
+                noDataToDisplay: '没有可显示的数据，请先上传。',
+                noRecordsProgramPhase: '未找到符合所选 Program 且 phase != sustain 的记录。',
+                errorTryAgain: '保存数据失败，请重试。',
+                errorNavigateDetail: '跳转到详情页失败，数据可能过大。',
+                errorShowAll: '显示全部数据失败。',
+                chartNotFound: '未找到图表',
+                errorSavingChart: '保存图表数据失败，请重试。',
+                errorNavigateChart: '跳转到图表放大页失败。',
+                phaseColumnNotFound: '数据中未找到 Phase 列。',
+                noRecordsSustain: '未找到 phase = sustain 的记录。',
+                errorFilteringSustain: 'Sustain 筛选失败。',
+                noRecordsSustainProgram: '未找到所选 Program 且 phase = sustain 的记录。',
+                errorNavigateSustainDetail: '跳转到 Sustain 详情页失败。',
+                noRecordsNpi: '未找到 phase != sustain 的记录。',
+                errorFilteringNpi: 'NPI 筛选失败。',
+                errorLoadingData: '加载数据失败：{message}', errorSavingSession: '保存数据失败。数据仅在当前会话可用。',
+                chartStatus: '模具状态', chartByProgram: '按项目状态分布', chartByPartType: '按零件类型状态分布',
+                chartBySupplier: '按供应商状态分布', chartStatusTrend: '状态时间趋势', chartSupplierTrend: '供应商风险趋势（红+黄占比）',
+                autoLoadBtn: '🔄 自动加载', autoLoading: '正在自动加载...', autoLoadSuccess: '已自动加载 {files} 个文件（{rows} 行）', autoLoadFailed: '自动加载失败：{message}'
+            }
+        };
+
+        function t(key, vars = {}) {
+            const dict = translations[currentLanguage] || translations.en;
+            const fallback = translations.en[key] || key;
+            let text = dict[key] || fallback;
+            Object.entries(vars).forEach(([name, value]) => {
+                text = text.replaceAll(`{${name}}`, String(value));
+            });
+            return text;
+        }
+
+        function applyLanguage() {
+            const setText = (id, key) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = t(key);
+            };
+
+            setText('header-title', 'headerTitle');
+            setText('header-subtitle', 'headerSubtitle');
+            setText('language-label', 'languageLabel');
+            setText('filters-title', 'filtersTitle');
+            setText('label-filter-lob', 'labelLob');
+            setText('label-filter-program', 'labelProgram');
+            setText('label-filter-phase', 'labelPhase');
+            setText('label-filter-part-type', 'labelPartType');
+            setText('label-filter-status', 'labelStatus');
+            setText('label-filter-build-complete', 'labelBuildComplete');
+            setText('label-filter-supplier', 'labelSupplier');
+            setText('label-filter-fe-engineer', 'labelFeEngineer');
+            setText('label-filter-dev-engineer', 'labelDevEngineer');
+            setText('label-filter-dgp', 'labelDgp');
+            setText('btn-reset', 'reset');
+            setText('btn-apply', 'apply');
+            setText('btn-export', 'exportExcel');
+            setText('btn-report', 'dashboardPdf');
+            setText('upload-label', 'upload');
+            setText('btn-clear', 'clear');
+            setText('import-history-title', 'importHistoryTitle');
+            setText('import-col-file', 'importFile');
+            setText('import-col-date', 'importDate');
+            setText('import-col-rows', 'importRows');
+            setText('import-col-action', 'importAction');
+            setText('charts-title', 'chartsTitle');
+            setText('table-title', 'tableTitle');
+            setText('loading-text', 'loadingData');
+            setText('no-data-text', 'noData');
+            setText('prev-btn', 'previous');
+            setText('next-btn', 'next');
+            setText('btn-total', 'btnTotal');
+            setText('btn-npi', 'btnNpi');
+            setText('btn-sustain', 'btnSustain');
+            setText('btn-npi-tool', 'btnNpiTool');
+            setText('btn-sustain-tool', 'btnSustainTool');
+            setText('btn-auto-load', 'autoLoadBtn');
+            setText('stat-title-total', 'totalRecords');
+            setText('stat-title-green', 'greenStatus');
+            setText('stat-title-yellow', 'yellowStatus');
+            setText('stat-title-red', 'redStatus');
+
+            const searchInput = document.getElementById('search-input');
+            if (searchInput) searchInput.placeholder = t('searchPlaceholder');
+
+            const rowsSelect = document.getElementById('rows-per-page');
+            if (rowsSelect && rowsSelect.options.length >= 4) {
+                rowsSelect.options[0].text = t('rows50');
+                rowsSelect.options[1].text = t('rows100');
+                rowsSelect.options[2].text = t('rows200');
+                rowsSelect.options[3].text = t('rows500');
+            }
+
+            const languageToggle = document.getElementById('language-toggle');
+            if (languageToggle) languageToggle.value = currentLanguage;
+
+            const selectIds = [
+                'filter-lob', 'filter-program', 'filter-phase', 'filter-part-type', 'filter-status',
+                'filter-build-complete', 'filter-supplier', 'filter-fe-engineer', 'filter-dev-engineer', 'filter-dgp'
+            ];
+            selectIds.forEach(id => {
+                const select = document.getElementById(id);
+                if (select && select.options.length > 0 && select.options[0].value === '') {
+                    select.options[0].text = t('all');
+                }
+            });
+
+            updateLastUpdateTime();
+        }
+
+        function setLanguage(language) {
+            currentLanguage = translations[language] ? language : 'en';
+            localStorage.setItem('toolingDashboardLanguage', currentLanguage);
+            document.documentElement.lang = currentLanguage === 'zh' ? 'zh-CN' : 'en';
+            applyLanguage();
+            updatePaginationUI();
+            renderImportHistory();
+            updateCharts();
+        }
+
+        // Load saved data from localStorage on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM Content Loaded, starting data load...');
+            currentLanguage = localStorage.getItem('toolingDashboardLanguage') || 'en';
+            applyLanguage();
+            loadSavedData();
+            loadImportHistory();
+            // Remove auto-load from folder on page refresh for static version
+            // triggerAutoLoad();
+        });
+
+        async function loadSavedData() {
+            try {
+                // Load from localStorage instead of backend API
+                const savedData = localStorage.getItem('toolingDashboardData');
+                if (savedData) {
+                    allData = JSON.parse(savedData);
+                    filteredData = [...allData];
+
+                    const headers = Object.keys(allData[0] || {}).filter(h => !h.startsWith('_'));
+                    if (headers.length > 0) {
+                        populateFilters(headers);
+                        renderTable(headers);
+                        updateStats();
+                        updateCharts();
+                        document.getElementById('no-data').style.display = 'none';
+                        document.getElementById('file-name').textContent = `Loaded ${allData.length} records from local storage`;
+                    } else {
+                        document.getElementById('table-header').innerHTML = '';
+                        document.getElementById('table-body').innerHTML = '';
+                        document.getElementById('no-data').style.display = 'block';
+                        document.getElementById('pagination').style.display = 'none';
+                        updateStats();
+                        updateCharts();
+                    }
+
+                    updateLastUpdateTime();
+                } else {
+                    document.getElementById('no-data').style.display = 'block';
+                    document.getElementById('file-name').textContent = 'No data loaded. Please upload Excel files.';
+                    updateStats();
+                    updateCharts();
+                }
+            } catch (error) {
+                console.error('Error loading saved data:', error);
+                document.getElementById('no-data').style.display = 'block';
+                document.getElementById('file-name').textContent = 'No data loaded. Please upload Excel files.';
+                updateStats();
+                updateCharts();
+            }
+        }
+
+        function updateLastUpdateTime() {
+            const now = new Date();
+            const locale = currentLanguage === 'zh' ? 'zh-CN' : 'en-US';
+            const formattedTime = now.toLocaleString(locale, {
+                year: 'numeric', 
+                month: '2-digit', 
+                day: '2-digit', 
+                hour: '2-digit', 
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('last-update-time').textContent = `${t('lastUpdatePrefix')}: ${formattedTime}`;
+            // Save to localStorage to persist across page refreshes
+            localStorage.setItem('toolingDashboardLastUpdateTime', formattedTime);
+        }
+
+        async function triggerAutoLoad() {
+            const btn = document.getElementById('btn-auto-load');
+            if (!btn) return;
+            
+            // For static version, auto-load is not available
+            alert('Auto-load is not available in static version. Please upload files manually.');
+            return;
+        }
+
+        // IndexedDB setup for large data storage
+        let db;
+        const DB_NAME = 'ToolingDashboardDB';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'dashboardData';
+
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    db = request.result;
+                    resolve(db);
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    const database = event.target.result;
+                    if (!database.objectStoreNames.contains(STORE_NAME)) {
+                        database.createObjectStore(STORE_NAME);
+                    }
+                };
+            });
+        }
+
+        function saveToDB(key, data) {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    initDB().then(() => saveToDB(key, data)).then(resolve).catch(reject);
+                    return;
+                }
+                
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.put(data, key);
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve();
+            });
+        }
+
+        function getFromDB(key) {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    initDB().then(() => getFromDB(key)).then(resolve).catch(reject);
+                    return;
+                }
+                
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.get(key);
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+            });
+        }
+
+        function clearDB() {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    initDB().then(() => clearDB()).then(resolve).catch(reject);
+                    return;
+                }
+                
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.clear();
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve();
+            });
+        }
+
+        // Initialize IndexedDB on page load
+        initDB().catch(error => console.error('Failed to initialize IndexedDB:', error));
+
+        function saveData() {
+            try {
+                // Try localStorage first for smaller datasets
+                localStorage.setItem('toolingDashboardData', JSON.stringify(allData));
+                console.log('Saved', allData.length, 'records to localStorage');
+            } catch (error) {
+                console.error('Error saving data to localStorage, using IndexedDB instead:', error);
+                // Fall back to IndexedDB for larger datasets
+                saveToDB('allData', allData).then(() => {
+                    console.log('Saved', allData.length, 'records to IndexedDB');
+                }).catch(err => {
+                    console.error('Error saving data to IndexedDB:', err);
+                    alert(t('errorSavingSession'));
+                });
+            }
+        }
+
+        let statusChart = null;
+        let barChart = null;
+        let statusByPartTypeChart = null;
+        let statusBySupplierChart = null;
+        let statusTrendChart = null;
+        let supplierRiskTrendChart = null;
+
+        function updateCharts() {
+            if (filteredData.length === 0) {
+                document.getElementById('charts-section').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('charts-section').style.display = 'block';
+
+            // Get status counts
+            const headers = Object.keys(allData[0] || {});
+            const statusColumns = headers.filter(header => {
+                const lowerHeader = header.toLowerCase();
+                return lowerHeader.includes('status') && 
+                       !lowerHeader.includes('build complete') && 
+                       !lowerHeader.includes('aggregate') &&
+                       !lowerHeader.includes('tooling development status');
+            });
+
+            const greenCount = filteredData.filter(row => {
+                return statusColumns.some(col => {
+                    const val = String(row[col] || '').toUpperCase().trim();
+                    const isGreen = val === 'G' || val === 'GREEN' || val === '1';
+                    return isGreen;
+                });
+            }).length;
+
+            const yellowCount = filteredData.filter(row => {
+                return statusColumns.some(col => {
+                    const val = String(row[col] || '').toUpperCase().trim();
+                    const isYellow = val === 'Y' || val === 'YELLOW' || val === '2';
+                    return isYellow;
+                });
+            }).length;
+
+            const redCount = filteredData.filter(row => {
+                return statusColumns.some(col => {
+                    const val = String(row[col] || '').toUpperCase().trim();
+                    const isRed = val === 'R' || val === 'RED' || val === '3' || val === 'R ';
+                    return isRed;
+                });
+            }).length;
+
+            // Update Status Chart
+            const statusCtx = document.getElementById('statusChart').getContext('2d');
+            if (statusChart) {
+                statusChart.destroy();
+            }
+            statusChart = new Chart(statusCtx, {
+                type: 'pie',
+                data: {
+                    labels: ['Green', 'Yellow', 'Red'],
+                    datasets: [{
+                        data: [greenCount, yellowCount, redCount],
+                        backgroundColor: ['#10b981', '#eab308', '#ef4444'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: function(event, elements) {
+                        if (elements.length > 0) {
+                            const element = elements[0];
+                            const index = element.index;
+                            const label = statusChart.data.labels[index];
+                            
+                            if (label === 'Red' || label === 'Yellow') {
+                                // Filter data based on the selected status
+                                const statusColumns = headers.filter(header => {
+                                    const lowerHeader = header.toLowerCase();
+                                    return lowerHeader.includes('status') && 
+                                           !lowerHeader.includes('build complete') && 
+                                           !lowerHeader.includes('aggregate') &&
+                                           !lowerHeader.includes('tooling development status');
+                                });
+                                
+                                const statusValue = label === 'Red' ? 'R' : 'Y';
+                                const filteredByStatus = allData.filter(row => {
+                                    return statusColumns.some(col => {
+                                        const val = String(row[col] || '').toUpperCase().trim();
+                                        if (statusValue === 'R') {
+                                            const isRed = val === 'R' || val === 'RED' || val === '3' || val === 'R ';
+                                            return isRed;
+                                        } else {
+                                            const isYellow = val === 'Y' || val === 'YELLOW' || val === '2';
+                                            return isYellow;
+                                        }
+                                    });
+                                });
+                                
+                                if (filteredByStatus.length === 0) {
+                                    alert(t('noRecordsSelectedStatus'));
+                                    return;
+                                }
+                                
+                                // Save filtered data and navigate to detail page
+                                try {
+                                    localStorage.setItem('toolingDashboardData', JSON.stringify(allData));
+                                    localStorage.setItem('toolingDashboardFilteredData', JSON.stringify(filteredByStatus));
+                                } catch (error) {
+                                    console.error('Error saving to localStorage, using IndexedDB instead:', error);
+                                    Promise.all([
+                                        saveToDB('allData', allData),
+                                        saveToDB('filteredData', filteredByStatus)
+                                    ]).then(() => {
+                                        console.log('Saved data to IndexedDB');
+                                    }).catch(err => {
+                                        console.error('Error saving to IndexedDB:', err);
+                                    });
+                                }
+                                window.location.href = 'tooling_table.html';
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            onClick: function(event, legendItem, legend) {
+                                const label = legendItem.text;
+                                if (label === 'Red' || label === 'Yellow') {
+                                    // Filter data based on the selected status
+                                    const statusColumns = headers.filter(header => {
+                                        const lowerHeader = header.toLowerCase();
+                                        return lowerHeader.includes('status') && 
+                                               !lowerHeader.includes('build complete') && 
+                                               !lowerHeader.includes('aggregate') &&
+                                               !lowerHeader.includes('tooling development status');
+                                    });
+                                    
+                                    const statusValue = label === 'Red' ? 'R' : 'Y';
+                                    const filteredByStatus = allData.filter(row => {
+                                        return statusColumns.some(col => {
+                                            const val = String(row[col] || '').toUpperCase().trim();
+                                            if (statusValue === 'R') {
+                                                const isRed = val === 'R' || val === 'RED' || val === '3' || val === 'R ';
+                                                return isRed;
+                                            } else {
+                                                const isYellow = val === 'Y' || val === 'YELLOW' || val === '2';
+                                                return isYellow;
+                                            }
+                                        });
+                                    });
+                                    
+                                    if (filteredByStatus.length === 0) {
+                                        alert(t('noRecordsSelectedStatus'));
+                                        return;
+                                    }
+                                    
+                                    // Save filtered data and navigate to detail page
+                                    try {
+                                        localStorage.setItem('toolingDashboardData', JSON.stringify(allData));
+                                        localStorage.setItem('toolingDashboardFilteredData', JSON.stringify(filteredByStatus));
+                                        window.location.href = 'tooling_table.html';
+                                    } catch (error) {
+                                        console.error('Error saving to localStorage, using IndexedDB instead:', error);
+                                        Promise.all([
+                                            saveToDB('allData', allData),
+                                            saveToDB('filteredData', filteredByStatus)
+                                        ]).then(() => {
+                                            console.log('Saved data to IndexedDB');
+                                            window.location.href = 'tooling_table.html';
+                                        }).catch(err => {
+                                            console.error('Error saving to IndexedDB:', err);
+                                            alert(t('errorTryAgain'));
+                                        });
+                                    }
+                                }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: t('chartStatus')
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+
+            // Get Status by Program
+            const barProgramColumn = headers.find(header => {
+                const lowerHeader = header.toLowerCase();
+                return lowerHeader.includes('program') || lowerHeader.includes('project');
+            });
+
+            const programStatusData = {};
+            if (barProgramColumn) {
+                filteredData.forEach(row => {
+                    const program = row[barProgramColumn] || 'Unknown';
+                    const statusColumns = headers.filter(header => {
+                        const lowerHeader = header.toLowerCase();
+                        return lowerHeader.includes('status') && 
+                               !lowerHeader.includes('build complete') && 
+                               !lowerHeader.includes('aggregate') &&
+                               !lowerHeader.includes('tooling development status');
+                    });
+
+                    let status = 'Unknown';
+                    if (statusColumns.length > 0) {
+                        statusColumns.forEach(col => {
+                            const val = String(row[col] || '').toUpperCase().trim();
+                            if (val.includes('G') || val.includes('GREEN') || val === '1') {
+                                status = 'Green';
+                            } else if (val.includes('Y') || val.includes('YELLOW') || val === '2') {
+                                status = 'Yellow';
+                            } else if (val.includes('R') || val.includes('RED') || val === '3' || val === 'R ') {
+                                status = 'Red';
+                            }
+                        });
+                    }
+
+                    if (!programStatusData[program]) {
+                        programStatusData[program] = { Green: 0, Yellow: 0, Red: 0, Unknown: 0, Total: 0 };
+                    }
+                    programStatusData[program][status]++;
+                    programStatusData[program].Total++;
+                });
+            }
+
+            // Sort by total count and take top 10
+            const sortedPrograms = Object.entries(programStatusData)
+                .sort((a, b) => b[1].Total - a[1].Total)
+                .slice(0, 10);
+
+            const programLabels = sortedPrograms.map(p => p[0]);
+            const programGreenData = sortedPrograms.map(p => p[1].Green);
+            const programYellowData = sortedPrograms.map(p => p[1].Yellow);
+            const programRedData = sortedPrograms.map(p => p[1].Red);
+
+            // Create datasets only for statuses that have data
+            const programDatasets = [];
+            if (programGreenData.some(v => v > 0)) {
+                programDatasets.push({
+                    label: 'Green',
+                    data: programGreenData,
+                    backgroundColor: '#10b981',
+                    borderColor: '#059669',
+                    borderWidth: 1
+                });
+            }
+            if (programYellowData.some(v => v > 0)) {
+                programDatasets.push({
+                    label: 'Yellow',
+                    data: programYellowData,
+                    backgroundColor: '#eab308',
+                    borderColor: '#ca8a04',
+                    borderWidth: 1
+                });
+            }
+            if (programRedData.some(v => v > 0)) {
+                programDatasets.push({
+                    label: 'Red',
+                    data: programRedData,
+                    backgroundColor: '#ef4444',
+                    borderColor: '#dc2626',
+                    borderWidth: 1
+                });
+            }
+
+            // Update Bar Chart
+            const barCtx = document.getElementById('barChart').getContext('2d');
+            if (barChart) {
+                barChart.destroy();
+            }
+            barChart = new Chart(barCtx, {
+                type: 'bar',
+                data: {
+                    labels: programLabels,
+                    datasets: programDatasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: function(event, elements) {
+                        if (elements.length > 0) {
+                            const element = elements[0];
+                            const datasetIndex = element.datasetIndex;
+                            const datasetLabel = barChart.data.datasets[datasetIndex].label;
+                            const index = element.index;
+                            const categoryLabel = barChart.data.labels[index];
+                            
+                            if (datasetLabel === 'Red' || datasetLabel === 'Yellow') {
+                                // Filter data based on the selected status and category
+                                const statusColumns = headers.filter(header => {
+                                    const lowerHeader = header.toLowerCase();
+                                    return lowerHeader.includes('status') && 
+                                           !lowerHeader.includes('build complete') && 
+                                           !lowerHeader.includes('aggregate');
+                                });
+                                
+                                // Find program column
+                                const programColumn = headers.find(header => {
+                                    const lowerHeader = header.toLowerCase();
+                                    return lowerHeader.includes('program') || lowerHeader.includes('project');
+                                });
+                                
+                                const statusValue = datasetLabel === 'Red' ? 'R' : 'Y';
+                                const filteredByStatus = allData.filter(row => {
+                                    // Check status
+                                    const statusMatch = statusColumns.some(col => {
+                                        const val = String(row[col] || '').toUpperCase().trim();
+                                        if (statusValue === 'R') {
+                                            return val.includes('R') || val.includes('RED') || val === '3' || val === 'R ';
+                                        } else {
+                                            return val.includes('Y') || val.includes('YELLOW') || val === '2';
+                                        }
+                                    });
+                                    
+                                    // Check category (program)
+                                    if (programColumn) {
+                                        const programValue = row[programColumn] || '';
+                                        const categoryMatch = programValue === categoryLabel;
+                                        return statusMatch && categoryMatch;
+                                    }
+                                    
+                                    return statusMatch;
+                                });
+                                
+                                if (filteredByStatus.length === 0) {
+                                    alert(t('noRecordsStatusProgram'));
+                                    return;
+                                }
+                                
+                                // Save filtered data and navigate to detail page
+                                try {
+                                    localStorage.setItem('toolingDashboardData', JSON.stringify(allData));
+                                    localStorage.setItem('toolingDashboardFilteredData', JSON.stringify(filteredByStatus));
+                                    window.location.href = 'tooling_table.html';
+                                } catch (error) {
+                                    console.error('Error saving to localStorage, using IndexedDB instead:', error);
+                                    // Fall back to IndexedDB for larger datasets
+                                    Promise.all([
+                                        saveToDB('allData', allData),
+                                        saveToDB('filteredData', filteredByStatus)
+                                    ]).then(() => {
+                                        console.log('Saved data to IndexedDB');
+                                        window.location.href = 'tooling_table.html';
+                                    }).catch(err => {
+                                        console.error('Error saving to IndexedDB:', err);
+                                        alert(t('errorTryAgain'));
+                                    });
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            onClick: function(event, legendItem, legend) {
+                                const label = legendItem.text;
+                                if (label === 'Red' || label === 'Yellow') {
+                                    // Filter data based on the selected status
+                                    const statusColumns = headers.filter(header => {
+                                        const lowerHeader = header.toLowerCase();
+                                        return lowerHeader.includes('status') && 
+                                               !lowerHeader.includes('build complete') && 
+                                               !lowerHeader.includes('aggregate');
+                                    });
+                                    
+                                    const statusValue = label === 'Red' ? 'R' : 'Y';
+                                    const filteredByStatus = allData.filter(row => {
+                                        return statusColumns.some(col => {
+                                            const val = String(row[col] || '').toUpperCase().trim();
+                                            if (statusValue === 'R') {
+                                                return val.includes('R') || val.includes('RED') || val === '3' || val === 'R ';
+                                            } else {
+                                                return val.includes('Y') || val.includes('YELLOW') || val === '2';
+                                            }
+                                        });
+                                    });
+                                    
+                                    if (filteredByStatus.length === 0) {
+                                        alert(t('noRecordsSelectedStatus'));
+                                        return;
+                                    }
+                                    
+                                    // Save filtered data and navigate to detail page
+                                    try {
+                                        localStorage.setItem('toolingDashboardData', JSON.stringify(allData));
+                                        localStorage.setItem('toolingDashboardFilteredData', JSON.stringify(filteredByStatus));
+                                        window.location.href = 'tooling_table.html';
+                                    } catch (error) {
+                                        console.error('Error saving to localStorage, using IndexedDB instead:', error);
+                                        Promise.all([
+                                            saveToDB('allData', allData),
+                                            saveToDB('filteredData', filteredByStatus)
+                                        ]).then(() => {
+                                            console.log('Saved data to IndexedDB');
+                                            window.location.href = 'tooling_table.html';
+                                        }).catch(err => {
+                                            console.error('Error saving to IndexedDB:', err);
+                                            alert(t('errorTryAgain'));
+                                        });
+                                    }
+                                }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: t('chartByProgram'),
+                            color: '#333',
+                            font: {
+                                size: 16,
+                                weight: 'bold'
+                            },
+                            padding: 10,
+                            cursor: 'pointer',
+                            onClick: function() {
+                                navigateToEnlargedChart('barChart', t('chartByProgram'));
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.raw;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            // Get Status by Part Type
+            const partTypeColumn = headers.find(header => {
+                const lowerHeader = header.toLowerCase();
+                return lowerHeader.includes('part type') || lowerHeader.includes('parttype');
+            });
+
+            const partTypeData = {};
+            if (partTypeColumn) {
+                filteredData.forEach(row => {
+                    const partType = row[partTypeColumn] || 'Unknown';
+                    const statusColumns = headers.filter(header => {
+                        const lowerHeader = header.toLowerCase();
+                        return lowerHeader.includes('status') && 
+                               !lowerHeader.includes('build complete') && 
+                               !lowerHeader.includes('aggregate') &&
+                               !lowerHeader.includes('tooling development status');
+                    });
+
+                    let status = 'Unknown';
+                    if (statusColumns.length > 0) {
+                        statusColumns.forEach(col => {
+                            const val = String(row[col] || '').toUpperCase().trim();
+                            if (val.includes('G') || val.includes('GREEN') || val === '1') {
+                                status = 'Green';
+                            } else if (val.includes('Y') || val.includes('YELLOW') || val === '2') {
+                                status = 'Yellow';
+                            } else if (val.includes('R') || val.includes('RED') || val === '3' || val === 'R ') {
+                                status = 'Red';
+                            }
+                        });
+                    }
+
+                    if (!partTypeData[partType]) {
+                        partTypeData[partType] = { Green: 0, Yellow: 0, Red: 0, Unknown: 0 };
+                    }
+                    partTypeData[partType][status]++;
+                });
+            }
+
+            const partTypeLabels = Object.keys(partTypeData).slice(0, 10);
+            const greenData = partTypeLabels.map(pt => partTypeData[pt].Green);
+            const yellowData = partTypeLabels.map(pt => partTypeData[pt].Yellow);
+            const redData = partTypeLabels.map(pt => partTypeData[pt].Red);
+
+            // Create datasets only for statuses that have data
+            const partTypeDatasets = [];
+            if (greenData.some(v => v > 0)) {
+                partTypeDatasets.push({
+                    label: 'Green',
+                    data: greenData,
+                    backgroundColor: '#10b981',
+                    borderColor: '#059669',
+                    borderWidth: 1
+                });
+            }
+            if (yellowData.some(v => v > 0)) {
+                partTypeDatasets.push({
+                    label: 'Yellow',
+                    data: yellowData,
+                    backgroundColor: '#eab308',
+                    borderColor: '#ca8a04',
+                    borderWidth: 1
+                });
+            }
+            if (redData.some(v => v > 0)) {
+                partTypeDatasets.push({
+                    label: 'Red',
+                    data: redData,
+                    backgroundColor: '#ef4444',
+                    borderColor: '#dc2626',
+                    borderWidth: 1
+                });
+            }
+
+            // Update Status by Part Type Chart
+            const statusByPartTypeCtx = document.getElementById('statusByPartTypeChart').getContext('2d');
+            if (statusByPartTypeChart) {
+                statusByPartTypeChart.destroy();
+            }
+            statusByPartTypeChart = new Chart(statusByPartTypeCtx, {
+                type: 'bar',
+                data: {
+                    labels: partTypeLabels,
+                    datasets: partTypeDatasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: function(event, elements) {
+                        if (elements.length > 0) {
+                            const element = elements[0];
+                            const datasetIndex = element.datasetIndex;
+                            const datasetLabel = statusByPartTypeChart.data.datasets[datasetIndex].label;
+                            const index = element.index;
+                            const categoryLabel = statusByPartTypeChart.data.labels[index];
+                            
+                            if (datasetLabel === 'Red' || datasetLabel === 'Yellow') {
+                                // Filter data based on the selected status and category
+                                const statusColumns = headers.filter(header => {
+                                    const lowerHeader = header.toLowerCase();
+                                    return lowerHeader.includes('status') && 
+                                           !lowerHeader.includes('build complete') && 
+                                           !lowerHeader.includes('aggregate');
+                                });
+                                
+                                // Find part type column
+                                const partTypeColumn = headers.find(header => {
+                                    const lowerHeader = header.toLowerCase();
+                                    return lowerHeader.includes('part type') || lowerHeader.includes('parttype');
+                                });
+                                
+                                const statusValue = datasetLabel === 'Red' ? 'R' : 'Y';
+                                const filteredByStatus = allData.filter(row => {
+                                    // Check status
+                                    const statusMatch = statusColumns.some(col => {
+                                        const val = String(row[col] || '').toUpperCase().trim();
+                                        if (statusValue === 'R') {
+                                            return val.includes('R') || val.includes('RED') || val === '3' || val === 'R ';
+                                        } else {
+                                            return val.includes('Y') || val.includes('YELLOW') || val === '2';
+                                        }
+                                    });
+                                    
+                                    // Check category (part type)
+                                    if (partTypeColumn) {
+                                        const partTypeValue = row[partTypeColumn] || '';
+                                        const categoryMatch = partTypeValue === categoryLabel;
+                                        return statusMatch && categoryMatch;
+                                    }
+                                    
+                                    return statusMatch;
+                                });
+                                
+                                if (filteredByStatus.length === 0) {
+                                    alert(t('noRecordsStatusPartType'));
+                                    return;
+                                }
+                                
+                                // Save filtered data and navigate to detail page
+                                try {
+                                    localStorage.setItem('toolingDashboardData', JSON.stringify(allData));
+                                    localStorage.setItem('toolingDashboardFilteredData', JSON.stringify(filteredByStatus));
+                                    window.location.href = 'tooling_table.html';
+                                } catch (error) {
+                                    console.error('Error saving to localStorage, using IndexedDB instead:', error);
+                                    // Fall back to IndexedDB for larger datasets
+                                    Promise.all([
+                                        saveToDB('allData', allData),
+                                        saveToDB('filteredData', filteredByStatus)
+                                    ]).then(() => {
+                                        console.log('Saved data to IndexedDB');
+                                        window.location.href = 'tooling_table.html';
+                                    }).catch(err => {
+                                        console.error('Error saving to IndexedDB:', err);
+                                        alert(t('errorTryAgain'));
+                                    });
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            onClick: function(event, legendItem, legend) {
+                                const label = legendItem.text;
+                                if (label === 'Red' || label === 'Yellow') {
+                                    // Filter data based on the selected status
+                                    const statusColumns = headers.filter(header => {
+                                        const lowerHeader = header.toLowerCase();
+                                        return lowerHeader.includes('status') && 
+                                               !lowerHeader.includes('build complete') && 
+                                               !lowerHeader.includes('aggregate');
+                                    });
+                                    
+                                    const statusValue = label === 'Red' ? 'R' : 'Y';
+                                    const filteredByStatus = allData.filter(row => {
+                                        return statusColumns.some(col => {
+                                            const val = String(row[col] || '').toUpperCase().trim();
+                                            if (statusValue === 'R') {
+                                                return val.includes('R') || val.includes('RED') || val === '3' || val === 'R ';
+                                            } else {
+                                                return val.includes('Y') || val.includes('YELLOW') || val === '2';
+                                            }
+                                        });
+                                    });
+                                    
+                                    if (filteredByStatus.length === 0) {
+                                        alert(t('noRecordsSelectedStatus'));
+                                        return;
+                                    }
+                                    
+                                    // Save filtered data and navigate to detail page
+                                    try {
+                                        localStorage.setItem('toolingDashboardData', JSON.stringify(allData));
+                                        localStorage.setItem('toolingDashboardFilteredData', JSON.stringify(filteredByStatus));
+                                        window.location.href = 'tooling_table.html';
+                                    } catch (error) {
+                                        console.error('Error saving to localStorage, using IndexedDB instead:', error);
+                                        Promise.all([
+                                            saveToDB('allData', allData),
+                                            saveToDB('filteredData', filteredByStatus)
+                                        ]).then(() => {
+                                            console.log('Saved data to IndexedDB');
+                                            window.location.href = 'tooling_table.html';
+                                        }).catch(err => {
+                                            console.error('Error saving to IndexedDB:', err);
+                                            alert(t('errorTryAgain'));
+                                        });
+                                    }
+                                }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: t('chartByPartType'),
+                            color: '#333',
+                            font: {
+                                size: 16,
+                                weight: 'bold'
+                            },
+                            padding: 10,
+                            cursor: 'pointer',
+                            onClick: function() {
+                                navigateToEnlargedChart('statusByPartTypeChart', t('chartByPartType'));
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.raw;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            // Get Status by Production Supplier
+            const supplierColumn = headers.find(header => {
+                const lowerHeader = header.toLowerCase();
+                return lowerHeader.includes('production supplier') || lowerHeader.includes('supplier') || lowerHeader.includes('vendor');
+            });
+
+            const supplierData = {};
+            if (supplierColumn) {
+                filteredData.forEach(row => {
+                    const supplier = row[supplierColumn] || 'Unknown';
+                    const statusColumns = headers.filter(header => {
+                        const lowerHeader = header.toLowerCase();
+                        return lowerHeader.includes('status') && 
+                               !lowerHeader.includes('build complete') && 
+                               !lowerHeader.includes('aggregate') &&
+                               !lowerHeader.includes('tooling development status');
+                    });
+
+                    let status = 'Unknown';
+                    if (statusColumns.length > 0) {
+                        statusColumns.forEach(col => {
+                            const val = String(row[col] || '').toUpperCase().trim();
+                            if (val.includes('G') || val.includes('GREEN') || val === '1') {
+                                status = 'Green';
+                            } else if (val.includes('Y') || val.includes('YELLOW') || val === '2') {
+                                status = 'Yellow';
+                            } else if (val.includes('R') || val.includes('RED') || val === '3' || val === 'R ') {
+                                status = 'Red';
+                            }
+                        });
+                    }
+
+                    if (!supplierData[supplier]) {
+                        supplierData[supplier] = { Green: 0, Yellow: 0, Red: 0, Unknown: 0 };
+                    }
+                    supplierData[supplier][status]++;
+                });
+            }
+
+            const supplierLabels = Object.keys(supplierData).slice(0, 10);
+            const supplierGreenData = supplierLabels.map(s => supplierData[s].Green);
+            const supplierYellowData = supplierLabels.map(s => supplierData[s].Yellow);
+            const supplierRedData = supplierLabels.map(s => supplierData[s].Red);
+
+            // Create datasets only for statuses that have data
+            const supplierDatasets = [];
+            if (supplierGreenData.some(v => v > 0)) {
+                supplierDatasets.push({
+                    label: 'Green',
+                    data: supplierGreenData,
+                    backgroundColor: '#10b981',
+                    borderColor: '#059669',
+                    borderWidth: 1
+                });
+            }
+            if (supplierYellowData.some(v => v > 0)) {
+                supplierDatasets.push({
+                    label: 'Yellow',
+                    data: supplierYellowData,
+                    backgroundColor: '#eab308',
+                    borderColor: '#ca8a04',
+                    borderWidth: 1
+                });
+            }
+            if (supplierRedData.some(v => v > 0)) {
+                supplierDatasets.push({
+                    label: 'Red',
+                    data: supplierRedData,
+                    backgroundColor: '#ef4444',
+                    borderColor: '#dc2626',
+                    borderWidth: 1
+                });
+            }
+
+            // Update Status by Production Supplier Chart
+            const statusBySupplierCtx = document.getElementById('statusBySupplierChart').getContext('2d');
+            if (statusBySupplierChart) {
+                statusBySupplierChart.destroy();
+            }
+            statusBySupplierChart = new Chart(statusBySupplierCtx, {
+                type: 'bar',
+                data: {
+                    labels: supplierLabels,
+                    datasets: supplierDatasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: function(event, elements) {
+                        if (elements.length > 0) {
+                            const element = elements[0];
+                            const datasetIndex = element.datasetIndex;
+                            const datasetLabel = statusBySupplierChart.data.datasets[datasetIndex].label;
+                            const index = element.index;
+                            const categoryLabel = statusBySupplierChart.data.labels[index];
+                            
+                            if (datasetLabel === 'Red' || datasetLabel === 'Yellow') {
+                                // Filter data based on the selected status and category
+                                const statusColumns = headers.filter(header => {
+                                    const lowerHeader = header.toLowerCase();
+                                    return lowerHeader.includes('status') && 
+                                           !lowerHeader.includes('build complete') && 
+                                           !lowerHeader.includes('aggregate');
+                                });
+                                
+                                // Find supplier column
+                                const supplierColumn = headers.find(header => {
+                                    const lowerHeader = header.toLowerCase();
+                                    return lowerHeader.includes('supplier') || lowerHeader.includes('production supplier');
+                                });
+                                
+                                const statusValue = datasetLabel === 'Red' ? 'R' : 'Y';
+                                const filteredByStatus = allData.filter(row => {
+                                    // Check status
+                                    const statusMatch = statusColumns.some(col => {
+                                        const val = String(row[col] || '').toUpperCase().trim();
+                                        if (statusValue === 'R') {
+                                            return val.includes('R') || val.includes('RED') || val === '3' || val === 'R ';
+                                        } else {
+                                            return val.includes('Y') || val.includes('YELLOW') || val === '2';
+                                        }
+                                    });
+                                    
+                                    // Check category (supplier)
+                                    if (supplierColumn) {
+                                        const supplierValue = row[supplierColumn] || '';
+                                        const categoryMatch = supplierValue === categoryLabel;
+                                        return statusMatch && categoryMatch;
+                                    }
+                                    
+                                    return statusMatch;
+                                });
+                                
+                                if (filteredByStatus.length === 0) {
+                                    alert(t('noRecordsStatusSupplier'));
+                                    return;
+                                }
+                                
+                                // Save filtered data and navigate to detail page
+                                try {
+                                    localStorage.setItem('toolingDashboardData', JSON.stringify(allData));
+                                    localStorage.setItem('toolingDashboardFilteredData', JSON.stringify(filteredByStatus));
+                                    window.location.href = 'tooling_table.html';
+                                } catch (error) {
+                                    console.error('Error saving to localStorage, using IndexedDB instead:', error);
+                                    // Fall back to IndexedDB for larger datasets
+                                    Promise.all([
+                                        saveToDB('allData', allData),
+                                        saveToDB('filteredData', filteredByStatus)
+                                    ]).then(() => {
+                                        console.log('Saved data to IndexedDB');
+                                        window.location.href = 'tooling_table.html';
+                                    }).catch(err => {
+                                        console.error('Error saving to IndexedDB:', err);
+                                        alert(t('errorTryAgain'));
+                                    });
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            onClick: function(event, legendItem, legend) {
+                                const label = legendItem.text;
+                                if (label === 'Red' || label === 'Yellow') {
+                                    // Filter data based on the selected status
+                                    const statusColumns = headers.filter(header => {
+                                        const lowerHeader = header.toLowerCase();
+                                        return lowerHeader.includes('status') && 
+                                               !lowerHeader.includes('build complete') && 
+                                               !lowerHeader.includes('aggregate');
+                                    });
+                                    
+                                    const statusValue = label === 'Red' ? 'R' : 'Y';
+                                    const filteredByStatus = allData.filter(row => {
+                                        return statusColumns.some(col => {
+                                            const val = String(row[col] || '').toUpperCase().trim();
+                                            if (statusValue === 'R') {
+                                                return val.includes('R') || val.includes('RED') || val === '3' || val === 'R ';
+                                            } else {
+                                                return val.includes('Y') || val.includes('YELLOW') || val === '2';
+                                            }
+                                        });
+                                    });
+                                    
+                                    if (filteredByStatus.length === 0) {
+                                        alert(t('noRecordsSelectedStatus'));
+                                        return;
+                                    }
+                                    
+                                    // Save filtered data and navigate to detail page
+                                    try {
+                                        localStorage.setItem('toolingDashboardData', JSON.stringify(allData));
+                                        localStorage.setItem('toolingDashboardFilteredData', JSON.stringify(filteredByStatus));
+                                        window.location.href = 'tooling_table.html';
+                                    } catch (error) {
+                                        console.error('Error saving to localStorage, using IndexedDB instead:', error);
+                                        Promise.all([
+                                            saveToDB('allData', allData),
+                                            saveToDB('filteredData', filteredByStatus)
+                                        ]).then(() => {
+                                            console.log('Saved data to IndexedDB');
+                                            window.location.href = 'tooling_table.html';
+                                        }).catch(err => {
+                                            console.error('Error saving to IndexedDB:', err);
+                                            alert(t('errorTryAgain'));
+                                        });
+                                    }
+                                }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: t('chartBySupplier'),
+                            color: '#333',
+                            font: {
+                                size: 16,
+                                weight: 'bold'
+                            },
+                            padding: 10,
+                            cursor: 'pointer',
+                            onClick: function() {
+                                navigateToEnlargedChart('statusBySupplierChart', t('chartBySupplier'));
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.raw;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            const updateDateColumn = headers.find(header => header.toLowerCase().includes('update date'));
+            const normalizeDateLabel = (rawValue) => {
+                const value = String(rawValue || '').trim();
+                if (!value) return null;
+                if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+                const parsed = new Date(value);
+                if (!Number.isNaN(parsed.getTime())) {
+                    return parsed.toISOString().slice(0, 10);
+                }
+                return null;
+            };
+
+            const resolveStatus = (row) => {
+                const values = statusColumns.map(col => String(row[col] || '').toUpperCase().trim());
+                if (values.some(v => v === 'R' || v === 'RED' || v === '3' || v === 'R ')) return 'Red';
+                if (values.some(v => v === 'Y' || v === 'YELLOW' || v === '2')) return 'Yellow';
+                if (values.some(v => v === 'G' || v === 'GREEN' || v === '1')) return 'Green';
+                return 'Unknown';
+            };
+
+            if (updateDateColumn) {
+                const statusTrendByDate = {};
+                filteredData.forEach(row => {
+                    const dateLabel = normalizeDateLabel(row[updateDateColumn]);
+                    if (!dateLabel) return;
+
+                    if (!statusTrendByDate[dateLabel]) {
+                        statusTrendByDate[dateLabel] = { Green: 0, Yellow: 0, Red: 0 };
+                    }
+
+                    const status = resolveStatus(row);
+                    if (statusTrendByDate[dateLabel][status] !== undefined) {
+                        statusTrendByDate[dateLabel][status] += 1;
+                    }
+                });
+
+                const trendLabels = Object.keys(statusTrendByDate).sort();
+                const trendGreen = trendLabels.map(label => statusTrendByDate[label].Green);
+                const trendYellow = trendLabels.map(label => statusTrendByDate[label].Yellow);
+                const trendRed = trendLabels.map(label => statusTrendByDate[label].Red);
+
+                const statusTrendCtx = document.getElementById('statusTrendChart').getContext('2d');
+                if (statusTrendChart) {
+                    statusTrendChart.destroy();
+                }
+                statusTrendChart = new Chart(statusTrendCtx, {
+                    type: 'line',
+                    data: {
+                        labels: trendLabels,
+                        datasets: [
+                            {
+                                label: 'Green',
+                                data: trendGreen,
+                                borderColor: '#10b981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                                fill: true,
+                                tension: 0.25
+                            },
+                            {
+                                label: 'Yellow',
+                                data: trendYellow,
+                                borderColor: '#eab308',
+                                backgroundColor: 'rgba(234, 179, 8, 0.2)',
+                                fill: true,
+                                tension: 0.25
+                            },
+                            {
+                                label: 'Red',
+                                data: trendRed,
+                                borderColor: '#ef4444',
+                                backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                                fill: true,
+                                tension: 0.25
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: t('chartStatusTrend')
+                            },
+                            legend: {
+                                position: 'bottom'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+
+                const topSuppliers = Object.entries(supplierData)
+                    .map(([name, counts]) => {
+                        const total = (counts.Green || 0) + (counts.Yellow || 0) + (counts.Red || 0);
+                        return { name, total };
+                    })
+                    .sort((a, b) => b.total - a.total)
+                    .slice(0, 5)
+                    .map(entry => entry.name);
+
+                const supplierTrendMap = {};
+                topSuppliers.forEach(supplier => {
+                    supplierTrendMap[supplier] = {};
+                    trendLabels.forEach(label => {
+                        supplierTrendMap[supplier][label] = { total: 0, risky: 0 };
+                    });
+                });
+
+                filteredData.forEach(row => {
+                    const supplier = supplierColumn ? (row[supplierColumn] || 'Unknown') : 'Unknown';
+                    if (!topSuppliers.includes(supplier)) return;
+
+                    const dateLabel = normalizeDateLabel(row[updateDateColumn]);
+                    if (!dateLabel || !supplierTrendMap[supplier][dateLabel]) return;
+
+                    supplierTrendMap[supplier][dateLabel].total += 1;
+                    const status = resolveStatus(row);
+                    if (status === 'Red' || status === 'Yellow') {
+                        supplierTrendMap[supplier][dateLabel].risky += 1;
+                    }
+                });
+
+                const supplierTrendPalette = ['#1d4ed8', '#7c3aed', '#0891b2', '#b45309', '#dc2626'];
+                const supplierTrendDatasets = topSuppliers.map((supplier, index) => {
+                    const data = trendLabels.map(label => {
+                        const point = supplierTrendMap[supplier][label];
+                        if (!point || point.total === 0) return 0;
+                        return Number(((point.risky / point.total) * 100).toFixed(1));
+                    });
+
+                    return {
+                        label: supplier,
+                        data,
+                        borderColor: supplierTrendPalette[index % supplierTrendPalette.length],
+                        backgroundColor: 'transparent',
+                        tension: 0.25
+                    };
+                });
+
+                const supplierRiskTrendCtx = document.getElementById('supplierRiskTrendChart').getContext('2d');
+                if (supplierRiskTrendChart) {
+                    supplierRiskTrendChart.destroy();
+                }
+                supplierRiskTrendChart = new Chart(supplierRiskTrendCtx, {
+                    type: 'line',
+                    data: {
+                        labels: trendLabels,
+                        datasets: supplierTrendDatasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: t('chartSupplierTrend')
+                            },
+                            legend: {
+                                position: 'bottom'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 100,
+                                ticks: {
+                                    callback: function(value) {
+                                        return `${value}%`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                if (statusTrendChart) {
+                    statusTrendChart.destroy();
+                    statusTrendChart = null;
+                }
+                if (supplierRiskTrendChart) {
+                    supplierRiskTrendChart.destroy();
+                    supplierRiskTrendChart = null;
+                }
+            }
+        }
+
+        function navigateToDetailPage() {
+            console.log('navigateToDetailPage called');
+            try {
+                // Check if there's data to navigate with
+                if (allData.length === 0) {
+                    alert(t('noDataToDisplay'));
+                    return;
+                }
+                
+                // Find phase column
+                const headers = Object.keys(allData[0] || {});
+                console.log('Available headers:', headers);
+                const phaseColumn = headers.find(header => {
+                    const lowerHeader = header.toLowerCase();
+                    return lowerHeader.includes('phase');
+                });
+                
+                console.log('Phase column found:', phaseColumn);
+                
+                let dataToNavigate = allData;
+                if (phaseColumn) {
+                    // Filter out sustain records (show NPI data)
+                    dataToNavigate = allData.filter(row => {
+                        const phaseValue = String(row[phaseColumn] || '').toLowerCase().trim();
+                        return phaseValue !== 'sustain';
+                    });
+                    console.log('Filtered to NPI data:', dataToNavigate.length, 'records out of', allData.length);
+                } else {
+                    console.log('No phase column found, showing all data');
+                }
+                
+                if (dataToNavigate.length === 0) {
+                    alert(t('noRecordsNpi'));
+                    return;
+                }
+                
+                // Static version - don't navigate to other pages
+                alert('Showing NPI data. Please use the filters and table below.');
+                // Update filteredData and re-render instead of navigating
+                filteredData = dataToNavigate;
+                populateFilters(headers);
+                renderTable(headers);
+                updateStats();
+                updateCharts();
+            } catch (error) {
+                console.error('Error filtering NPI data:', error);
+                alert('Error filtering NPI data');
+            }
+        }
+
+        function filterByTotal() {
+            try {
+                // Check if there's data
+                if (allData.length === 0) {
+                    alert(t('noDataToDisplay'));
+                    return;
+                }
+                
+                // Reset to show all data
+                filteredData = allData;
+                const headers = Object.keys(allData[0] || {});
+                populateFilters(headers);
+                renderTable(headers);
+                updateStats();
+                updateCharts();
+                
+                console.log(`Showing all ${allData.length} records`);
+            } catch (error) {
+                console.error('Error showing all data:', error);
+                alert(t('errorShowAll'));
+            }
+        }
+
+        function filterByTool() {
+            try {
+                // Check if there's data
+                if (allData.length === 0) {
+                    alert(t('noDataToDisplay'));
+                    return;
+                }
+                
+                // Find tool-related columns
+                const headers = Object.keys(allData[0] || {});
+                const toolColumns = headers.filter(header => {
+                    const lowerHeader = header.toLowerCase();
+                    return lowerHeader.includes('tool') || lowerHeader.includes('#');
+                });
+                
+                if (toolColumns.length === 0) {
+                    alert('No tool columns found in data');
+                    return;
+                }
+                
+                // Filter data where tool columns have values
+                const toolData = allData.filter(row => {
+                    return toolColumns.some(col => {
+                        const value = row[col];
+                        return value !== null && value !== undefined && value !== '';
+                    });
+                });
+                
+                if (toolData.length === 0) {
+                    alert('No records with tool data found');
+                    return;
+                }
+                
+                // Update filteredData and re-render
+                filteredData = toolData;
+                populateFilters(headers);
+                renderTable(headers);
+                updateStats();
+                updateCharts();
+                
+                console.log(`Filtered to ${toolData.length} tool-related records`);
+            } catch (error) {
+                console.error('Error filtering by tool:', error);
+                alert('Error filtering by tool data');
+            }
+        }
+
+        function filterByToolPlus1() {
+            try {
+                // Check if there's data
+                if (allData.length === 0) {
+                    alert(t('noDataToDisplay'));
+                    return;
+                }
+                
+                // Find tool-related columns
+                const headers = Object.keys(allData[0] || {});
+                const toolColumns = headers.filter(header => {
+                    const lowerHeader = header.toLowerCase();
+                    return lowerHeader.includes('tool') || lowerHeader.includes('#');
+                });
+                
+                if (toolColumns.length === 0) {
+                    alert('No tool columns found in data');
+                    return;
+                }
+                
+                // Filter data where tool columns have values and are not empty or "N/A"
+                const toolPlus1Data = allData.filter(row => {
+                    return toolColumns.some(col => {
+                        const value = row[col];
+                        const strValue = String(value || '').trim().toLowerCase();
+                        return value !== null && value !== undefined && value !== '' && strValue !== 'n/a' && strValue !== '-';
+                    });
+                });
+                
+                if (toolPlus1Data.length === 0) {
+                    alert('No records with valid tool data found');
+                    return;
+                }
+                
+                // Update filteredData and re-render
+                filteredData = toolPlus1Data;
+                populateFilters(headers);
+                renderTable(headers);
+                updateStats();
+                updateCharts();
+                
+                console.log(`Filtered to ${toolPlus1Data.length} tool+1 records (excluding N/A and empty values)`);
+            } catch (error) {
+                console.error('Error filtering by tool+1:', error);
+                alert('Error filtering by tool+1 data');
+            }
+        }
+
+        function navigateToEnlargedChart(chartId, chartTitle) {
+            alert('Enlarged chart view is not available in static version. Please use the charts below.');
+        }
+
+        function filterBySustain() {
+            try {
+                // Check if there's data
+                if (allData.length === 0) {
+                    alert(t('noDataToDisplay'));
+                    return;
+                }
+                
+                // Find phase column
+                const headers = Object.keys(allData[0] || {});
+                const phaseColumn = headers.find(header => {
+                    const lowerHeader = header.toLowerCase();
+                    return lowerHeader.includes('phase');
+                });
+                
+                if (!phaseColumn) {
+                    alert(t('phaseColumnNotFound'));
+                    return;
+                }
+                
+                // Filter data where phase is "sustain"
+                const sustainData = allData.filter(row => {
+                    const phaseValue = String(row[phaseColumn] || '').toLowerCase().trim();
+                    return phaseValue === 'sustain';
+                });
+                
+                if (sustainData.length === 0) {
+                    alert(t('noRecordsSustain'));
+                    return;
+                }
+                
+                // Update filteredData and re-render charts
+                filteredData = sustainData;
+                populateFilters(headers);
+                renderTable(headers);
+                updateStats();
+                updateCharts();
+                
+                console.log(`Filtered to ${sustainData.length} sustain records`);
+            } catch (error) {
+                console.error('Error filtering by sustain:', error);
+                alert(t('errorFilteringSustain'));
+            }
+        }
+
+        function navigateToSustainDetail() {
+            try {
+                // Check if there's data to navigate with
+                if (allData.length === 0) {
+                    alert(t('noDataToDisplay'));
+                    return;
+                }
+                
+                // Find phase column
+                const headers = Object.keys(allData[0] || {});
+                console.log('Available headers:', headers);
+                const phaseColumn = headers.find(header => {
+                    const lowerHeader = header.toLowerCase();
+                    return lowerHeader.includes('phase');
+                });
+                
+                console.log('Phase column found:', phaseColumn);
+                
+                // Filter data where phase is "sustain"
+                const sustainData = allData.filter(row => {
+                    const phaseValue = String(row[phaseColumn] || '').toLowerCase().trim();
+                    return phaseValue === 'sustain';
+                });
+                
+                console.log('Filtered to sustain data:', sustainData.length, 'records out of', allData.length);
+                
+                if (sustainData.length === 0) {
+                    alert(t('noRecordsSustain'));
+                    return;
+                }
+                
+                // Save filtered data and navigate to detail page
+                try {
+                    // Clear old data first
+                    localStorage.removeItem('toolingDashboardData');
+                    localStorage.removeItem('toolingDashboardFilteredData');
+                    localStorage.setItem('toolingDashboardData', JSON.stringify(allData));
+                    localStorage.setItem('toolingDashboardFilteredData', JSON.stringify(sustainData));
+                    localStorage.setItem('toolingDashboardTimestamp', Date.now().toString());
+                    console.log('Saved sustain data to localStorage with timestamp');
+                } catch (error) {
+                    console.error('Error saving to localStorage, using IndexedDB instead:', error);
+                    Promise.all([
+                        saveToDB('allData', allData),
+                        saveToDB('filteredData', sustainData),
+                        saveToDB('timestamp', Date.now().toString())
+                    ]).then(() => {
+                        console.log('Saved data to IndexedDB');
+                    }).catch(err => {
+                        console.error('Error saving to IndexedDB:', err);
+                    });
+                }
+                // Static version - don't navigate to other pages
+                alert('Detail page navigation is not available in static version. Please use the filters and table below.');
+                // Update filteredData and re-render instead of navigating
+                filteredData = sustainData;
+                populateFilters(headers);
+                renderTable(headers);
+                updateStats();
+                updateCharts();
+            } catch (error) {
+                console.error('Error filtering sustain data:', error);
+                alert('Error filtering sustain data');
+            }
+        }
+
+        function navigateToDetailPageByStatus(status) {
+            try {
+                // Check if there's data to navigate with
+                if (allData.length === 0) {
+                    alert(t('noDataToDisplay'));
+                    return;
+                }
+                
+                // Find status columns
+                const headers = Object.keys(allData[0] || {});
+                const statusColumns = headers.filter(header => {
+                    const lowerHeader = header.toLowerCase();
+                    return lowerHeader.includes('status') && 
+                           !lowerHeader.includes('build complete') && 
+                           !lowerHeader.includes('aggregate') &&
+                           !lowerHeader.includes('tooling development status');
+                });
+                
+                const statusValue = status === 'Red' ? 'R' : 'Y';
+                const filteredByStatus = allData.filter(row => {
+                    return statusColumns.some(col => {
+                        const val = String(row[col] || '').toUpperCase().trim();
+                        if (statusValue === 'R') {
+                            return val === 'R' || val === 'RED' || val === '3' || val === 'R ';
+                        } else {
+                            return val === 'Y' || val === 'YELLOW' || val === '2';
+                        }
+                    });
+                });
+                
+                if (filteredByStatus.length === 0) {
+                    alert(t('noRecordsSelectedStatus'));
+                    return;
+                }
+                
+                // Static version - don't navigate to other pages
+                alert(`Showing ${status} status data. Please use the filters and table below.`);
+                // Update filteredData and re-render instead of navigating
+                filteredData = filteredByStatus;
+                populateFilters(headers);
+                renderTable(headers);
+                updateStats();
+                updateCharts();
+            } catch (error) {
+                console.error('Error filtering by status:', error);
+                alert('Error filtering by status');
+            }
+        }
+
+        function filterByNPI() {
+            try {
+                // Check if there's data
+                if (allData.length === 0) {
+                    alert(t('noDataToDisplay'));
+                    return;
+                }
+                
+                // Find phase column
+                const headers = Object.keys(allData[0] || {});
+                const phaseColumn = headers.find(header => {
+                    const lowerHeader = header.toLowerCase();
+                    return lowerHeader.includes('phase');
+                });
+                
+                if (!phaseColumn) {
+                    alert(t('phaseColumnNotFound'));
+                    return;
+                }
+                
+                // Filter data where phase is NOT "sustain"
+                const npiData = allData.filter(row => {
+                    const phaseValue = String(row[phaseColumn] || '').toLowerCase().trim();
+                    return phaseValue !== 'sustain';
+                });
+                
+                if (npiData.length === 0) {
+                    alert(t('noRecordsNpi'));
+                    return;
+                }
+                
+                // Update filteredData and re-render charts
+                filteredData = npiData;
+                populateFilters(headers);
+                renderTable(headers);
+                updateStats();
+                updateCharts();
+                
+                console.log(`Filtered to ${npiData.length} NPI records (excluding sustain)`);
+            } catch (error) {
+                console.error('Error filtering by NPI:', error);
+                alert(t('errorFilteringNpi'));
+            }
+        }
+
+        async function handleFileUpload(event) {
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('no-data').style.display = 'none';
+
+            const excelFiles = Array.from(files).filter(file => 
+                file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
+            );
+            
+            if (excelFiles.length === 0) {
+                document.getElementById('loading').style.display = 'none';
+                alert('No Excel files selected');
+                return;
+            }
+
+            document.getElementById('file-name').textContent = `Selected ${excelFiles.length} Excel file(s)`;
+            document.getElementById('upload-progress').textContent = `Processing ${excelFiles.length} file(s)...`;
+
+            try {
+                let totalRows = 0;
+                let allNewData = [];
+
+                for (const file of excelFiles) {
+                    const buffer = await readFileAsArrayBuffer(file);
+                    const workbook = XLSX.read(buffer, { type: 'array' });
+                    
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    if (jsonData.length < 3) continue;
+
+                    const headers = jsonData[2];
+                    const dataRows = jsonData.slice(3);
+                    
+                    const fileData = dataRows.map(row => {
+                        const obj = {};
+                        headers.forEach((header, index) => {
+                            obj[header] = row[index];
+                        });
+                        obj['_sourceFile'] = file.name;
+                        obj['_importDate'] = new Date().toISOString();
+                        return obj;
+                    }).filter(row => Object.values(row).some(val => val !== undefined && val !== null && val !== ''));
+                    
+                    allNewData = allNewData.concat(fileData);
+                    totalRows += fileData.length;
+                }
+
+                if (allNewData.length === 0) {
+                    throw new Error('No valid data found in Excel files');
+                }
+
+                // Append to existing data
+                allData = allData.concat(allNewData);
+                filteredData = [...allData];
+                
+                // Save to localStorage
+                saveData();
+                
+                // Update UI
+                const headers = Object.keys(allData[0] || {}).filter(h => !h.startsWith('_'));
+                populateFilters(headers);
+                renderTable(headers);
+                updateStats();
+                updateCharts();
+                
+                document.getElementById('upload-progress').textContent = `Completed: ${excelFiles.length} files, ${totalRows} rows added`;
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('file-input').value = '';
+                updateLastUpdateTime();
+                
+                // Add to import history
+                addImportHistory(excelFiles, totalRows);
+                
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('upload-progress').textContent = '';
+                alert(`Upload failed: ${error.message}`);
+                console.error('Upload error:', error);
+            }
+        }
+
+        async function handleFolderUpload(event) {
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('no-data').style.display = 'none';
+
+            const excelFiles = Array.from(files).filter(file => 
+                file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
+            );
+            
+            if (excelFiles.length === 0) {
+                document.getElementById('loading').style.display = 'none';
+                alert('No Excel files found in folder');
+                return;
+            }
+
+            document.getElementById('file-name').textContent = `Found ${excelFiles.length} Excel files in folder`;
+            document.getElementById('upload-progress').textContent = `Processing ${excelFiles.length} files from folder...`;
+
+            try {
+                let totalRows = 0;
+                let allNewData = [];
+
+                for (const file of excelFiles) {
+                    document.getElementById('upload-progress').textContent = `Processing: ${file.name}...`;
+                    
+                    const buffer = await readFileAsArrayBuffer(file);
+                    const workbook = XLSX.read(buffer, { type: 'array' });
+                    
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    if (jsonData.length < 3) continue;
+
+                    const headers = jsonData[2];
+                    const dataRows = jsonData.slice(3);
+                    
+                    const fileData = dataRows.map(row => {
+                        const obj = {};
+                        headers.forEach((header, index) => {
+                            obj[header] = row[index];
+                        });
+                        obj['_sourceFile'] = file.name;
+                        obj['_importDate'] = new Date().toISOString();
+                        return obj;
+                    }).filter(row => Object.values(row).some(val => val !== undefined && val !== null && val !== ''));
+                    
+                    allNewData = allNewData.concat(fileData);
+                    totalRows += fileData.length;
+                }
+
+                if (allNewData.length === 0) {
+                    throw new Error('No valid data found in Excel files');
+                }
+
+                // Append to existing data
+                allData = allData.concat(allNewData);
+                filteredData = [...allData];
+                
+                // Save to localStorage
+                saveData();
+                
+                // Update UI
+                const headers = Object.keys(allData[0] || {}).filter(h => !h.startsWith('_'));
+                populateFilters(headers);
+                renderTable(headers);
+                updateStats();
+                updateCharts();
+                
+                document.getElementById('upload-progress').textContent = `Completed: ${excelFiles.length} files, ${totalRows} rows added`;
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('folder-input').value = '';
+                updateLastUpdateTime();
+                
+                // Add to import history
+                addImportHistory(excelFiles, totalRows);
+                
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('upload-progress').textContent = '';
+                alert(`Folder upload failed: ${error.message}`);
+                console.error('Folder upload error:', error);
+            }
+        }
+
+        function readFileAsArrayBuffer(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = (e) => reject(e);
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        function addImportHistory(files, rows) {
+            const importId = Date.now();
+            const fileNames = Array.from(files).map(f => f.name).join(', ');
+            
+            importHistory.push({
+                id: importId,
+                file: fileNames,
+                importedAt: new Date().toISOString(),
+                rows: rows
+            });
+            
+            // Save import history to localStorage
+            localStorage.setItem('toolingDashboardImportHistory', JSON.stringify(importHistory));
+            renderImportHistory();
+        }
+
+        function reuploadFolder() {
+            document.getElementById('file-input').click();
+        }
+
+        async function loadImportHistory() {
+            try {
+                // Load from localStorage instead of backend API
+                const savedHistory = localStorage.getItem('toolingDashboardImportHistory');
+                if (savedHistory) {
+                    importHistory = JSON.parse(savedHistory);
+                    renderImportHistory();
+                } else {
+                    importHistory = [];
+                    renderImportHistory();
+                }
+            } catch (error) {
+                console.error('Error loading import history:', error);
+                importHistory = [];
+                renderImportHistory();
+            }
+        }
+
+        function renderImportHistory() {
+            const tbody = document.getElementById('import-history-body');
+            const counter = document.getElementById('import-history-count');
+            counter.textContent = `${importHistory.length} imports`;
+
+            if (importHistory.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="color: #666;">No imports yet.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = importHistory.map(item => {
+                const date = new Date(item.importedAt).toLocaleString();
+                return `
+                    <tr>
+                        <td>${item.id}</td>
+                        <td>${item.file}</td>
+                        <td>${date}</td>
+                        <td>${item.rows}</td>
+                        <td>
+                            <button onclick="deleteImportBatch(${item.id})" style="padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function deleteImportBatch(importId) {
+            const match = importHistory.find(item => item.id === importId);
+            const sourceFile = match ? match.file : 'selected import';
+            const confirmed = confirm(`Delete import #${importId} from '${sourceFile}'? This will remove all data from that import.`);
+            if (!confirmed) return;
+
+            try {
+                // Remove from import history
+                importHistory = importHistory.filter(item => item.id !== importId);
+                localStorage.setItem('toolingDashboardImportHistory', JSON.stringify(importHistory));
+                
+                // Remove data from allData
+                allData = allData.filter(row => row._importId !== importId);
+                filteredData = [...allData];
+                
+                // Save updated data
+                saveData();
+                
+                // Update UI
+                const headers = Object.keys(allData[0] || {}).filter(h => !h.startsWith('_'));
+                if (headers.length > 0) {
+                    populateFilters(headers);
+                    renderTable(headers);
+                    updateStats();
+                    updateCharts();
+                }
+                
+                renderImportHistory();
+            } catch (error) {
+                console.error('Error deleting import:', error);
+                alert('Failed to delete import');
+            }
+        }
+
+        function exportToExcel() {
+            if (filteredData.length === 0) {
+                alert(t('noDataToExport'));
+                return;
+            }
+
+            // Get headers from the data - ensure Update Date is first
+            const headers = Object.keys(filteredData[0]);
+            const orderedHeaders = ['Update Date', ...headers.filter(h => h !== 'Update Date')];
+            
+            // Create worksheet data with proper header order
+            const wsData = [orderedHeaders];
+            filteredData.forEach(row => {
+                const rowData = orderedHeaders.map(header => row[header] || '');
+                wsData.push(rowData);
+            });
+
+            // Create worksheet
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            
+            // Create workbook
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Tooling Data');
+            
+            // Generate filename with timestamp
+            const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            const filename = `Tooling_Status_Export_${timestamp}.xlsx`;
+            
+            // Download file
+            XLSX.writeFile(wb, filename);
+            
+            console.log(`Exported ${filteredData.length} records to ${filename}`);
+        }
+
+        async function downloadDashboardReport() {
+            if (filteredData.length === 0) {
+                alert(t('noDataToReport'));
+                return;
+            }
+
+            const progress = document.getElementById('upload-progress');
+            const previousProgress = progress.textContent;
+            progress.textContent = t('reportGenerating');
+
+            try {
+                const dashboardRoot = document.querySelector('.main-content');
+                const canvas = await html2canvas(dashboardRoot, {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: '#f5f5f5',
+                    windowWidth: document.documentElement.scrollWidth,
+                });
+
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+
+                const pageWidth = pdf.internal.pageSize.getWidth();
+                const pageHeight = pdf.internal.pageSize.getHeight();
+                const margin = 10;
+                const imgWidth = pageWidth - margin * 2;
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+                let remainingHeight = imgHeight;
+                let position = margin;
+                let sourceY = 0;
+                const pxPerMm = canvas.height / imgHeight;
+                const usableHeight = pageHeight - margin * 2;
+
+                while (remainingHeight > 0) {
+                    const sliceHeightMm = Math.min(remainingHeight, usableHeight);
+                    const sliceHeightPx = Math.floor(sliceHeightMm * pxPerMm);
+
+                    const pageCanvas = document.createElement('canvas');
+                    pageCanvas.width = canvas.width;
+                    pageCanvas.height = sliceHeightPx;
+                    const pageCtx = pageCanvas.getContext('2d');
+                    pageCtx.drawImage(canvas, 0, sourceY, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+
+                    const pageImg = pageCanvas.toDataURL('image/png');
+                    if (sourceY > 0) {
+                        pdf.addPage();
+                    }
+                    pdf.addImage(pageImg, 'PNG', margin, position, imgWidth, sliceHeightMm);
+
+                    sourceY += sliceHeightPx;
+                    remainingHeight -= sliceHeightMm;
+                }
+
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                pdf.save(`Tooling_Dashboard_Report_${timestamp}.pdf`);
+            } catch (error) {
+                console.error('Dashboard PDF error:', error);
+                alert(t('reportFailed', { message: error.message }));
+            } finally {
+                progress.textContent = previousProgress;
+            }
+        }
+
+        function populateFilters(headers) {
+            // Try to find matching columns dynamically
+            const filterConfigs = [
+                { id: 'filter-lob', columns: ['LOB', 'Line of Business', 'Business Unit'] },
+                { id: 'filter-program', columns: ['Program', 'Project', 'Program Name'] },
+                { id: 'filter-phase', columns: ['OLP Phase', 'Phase', 'NPI phase', 'OLP Phase/NPI phase'] },
+                { id: 'filter-part-type', columns: ['Part Type', 'Type', 'Part Type (Aggregate)', 'Part Type (Aggregate)'] },
+                { id: 'filter-build-complete', columns: ['Build Complete Status', 'Build Complete', 'Build Status', 'Complete Status', 'Build Complete Status (Aggregate)', 'Aggregate'] },
+                { id: 'filter-supplier', columns: ['Tooling Supplier name', 'Supplier', 'Tooling Supplier', 'Vendor'] },
+                { id: 'filter-fe-engineer', columns: ['Front End Tooling Engineer', 'FE Engineer', 'Front End Engineer'] },
+                { id: 'filter-dev-engineer', columns: ['Development Tooling Engineer', 'Dev Engineer', 'Development Engineer'] },
+                { id: 'filter-dgp', columns: ['DGP/NON-DGP', 'DGP', 'DGP Status', 'DGP Status (Aggregate)', 'DGP/NON-DGP (Aggregate)'] }
+            ];
+
+            filterConfigs.forEach(config => {
+                const select = document.getElementById(config.id);
+                if (!select) return;
+                
+                select.innerHTML = `<option value="">${t('all')}</option>`;
+                
+                // Find the actual column name in the data
+                let actualColumn = null;
+                for (const colName of config.columns) {
+                    if (headers.includes(colName)) {
+                        actualColumn = colName;
+                        break;
+                    }
+                }
+                
+                // If no exact match, try partial match
+                if (!actualColumn) {
+                    for (const colName of config.columns) {
+                        const partialMatch = headers.find(h => h.toLowerCase().includes(colName.toLowerCase()));
+                        if (partialMatch) {
+                            actualColumn = partialMatch;
+                            break;
+                        }
+                    }
+                }
+                
+                if (actualColumn) {
+                    const uniqueValues = [...new Set(allData.map(row => row[actualColumn]).filter(v => v && v.trim() !== ''))];
+                    uniqueValues.sort().forEach(value => {
+                        const option = document.createElement('option');
+                        option.value = value;
+                        option.textContent = value;
+                        select.appendChild(option);
+                    });
+                    // Store the actual column name for filtering
+                    select.dataset.actualColumn = actualColumn;
+                    select.disabled = false;
+                    // Set default to All (empty value)
+                    select.value = '';
+                    // Add change handler to deselect All when specific options are selected
+                    select.addEventListener('change', function(e) {
+                        const options = Array.from(select.options);
+                        const allOption = options[0]; // First option is "All"
+                        const selectedOptions = Array.from(select.selectedOptions);
+                        
+                        // If All is selected along with other options, deselect All
+                        if (selectedOptions.includes(allOption) && selectedOptions.length > 1) {
+                            allOption.selected = false;
+                        }
+                    });
+                    // Remove old event listener and add new one
+                    select.removeEventListener('change', applyFilters);
+                    select.addEventListener('change', applyFilters);
+                    console.log(`Filter ${config.id} mapped to column: ${actualColumn}, has ${uniqueValues.length} unique values`);
+                } else {
+                    console.warn(`No matching column found for filter ${config.id}`);
+                    select.disabled = true;
+                }
+            });
+
+            // Special handling for status filter - it has hardcoded options
+            const statusSelect = document.getElementById('filter-status');
+            if (statusSelect) {
+                statusSelect.value = '';
+                // Add change handler to deselect All when specific options are selected
+                statusSelect.addEventListener('change', function(e) {
+                    const options = Array.from(statusSelect.options);
+                    const allOption = options[0]; // First option is "All"
+                    const selectedOptions = Array.from(statusSelect.selectedOptions);
+                    
+                    // If All is selected along with other options, deselect All
+                    if (selectedOptions.includes(allOption) && selectedOptions.length > 1) {
+                        allOption.selected = false;
+                    }
+                });
+                statusSelect.removeEventListener('change', applyFilters);
+                statusSelect.addEventListener('change', applyFilters);
+                console.log('Status filter event listener attached');
+            }
+        }
+
+        function renderTable(headers) {
+            const headerRow = document.getElementById('table-header');
+            const tbody = document.getElementById('table-body');
+            
+            headerRow.innerHTML = '';
+            tbody.innerHTML = '';
+
+            // Add Update Date column first
+            const updateDateTh = document.createElement('th');
+            updateDateTh.innerHTML = `Update Date <span class="sort-icon">⇅</span>`;
+            updateDateTh.onclick = () => sortTable(-1); // Special index for Update Date
+            headerRow.appendChild(updateDateTh);
+
+            // Add remaining columns (display all columns)
+            headers.forEach((header, index) => {
+                const th = document.createElement('th');
+                th.innerHTML = `${header} <span class="sort-icon">⇅</span>`;
+                th.onclick = () => sortTable(index);
+                headerRow.appendChild(th);
+            });
+
+            renderTableBody(headers);
+        }
+
+        function renderTableBody(headers) {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+
+            // Calculate pagination
+            const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+            if (currentPage > totalPages) currentPage = totalPages || 1;
+            
+            const startIndex = (currentPage - 1) * rowsPerPage;
+            const endIndex = Math.min(startIndex + rowsPerPage, filteredData.length);
+            const pageData = filteredData.slice(startIndex, endIndex);
+
+            pageData.forEach(row => {
+                const tr = document.createElement('tr');
+                
+                // Add Update Date column first
+                const updateDateTd = document.createElement('td');
+                updateDateTd.textContent = row['Update Date'] || '';
+                tr.appendChild(updateDateTd);
+
+                // Add remaining columns (display all columns)
+                headers.forEach(header => {
+                    const td = document.createElement('td');
+                    const value = row[header];
+                    
+                    // Debug logging for tool # column
+                    if (header.toLowerCase().includes('tool') || header.includes('#')) {
+                        console.log('Tool column detected:', header, 'Value:', value, 'Type:', typeof value);
+                    }
+                    
+                    // Check if this is a build complete status column (check first to avoid conflicts)
+                    const buildCompleteKeywords = ['build complete', 'complete status', 'build status', 'aggregate'];
+                    const isBuildCompleteColumn = buildCompleteKeywords.some(kw => header.toLowerCase().includes(kw));
+                    
+                    // Check if this is a status column (only if not build complete)
+                    const statusKeywords = ['status', 'r.y.g', 'ryg', '(r.y.g)', 'r/y/g'];
+                    const isStatusColumn = !isBuildCompleteColumn && statusKeywords.some(kw => header.toLowerCase().includes(kw));
+                    
+                    if (isStatusColumn) {
+                        const upperValue = String(value).toUpperCase().trim();
+                        // More flexible matching for status values
+                        if (upperValue.includes('G') || upperValue.includes('GREEN') || upperValue === '1') {
+                            td.innerHTML = '<span class="status-green">G</span>';
+                        } else if (upperValue.includes('Y') || upperValue.includes('YELLOW') || upperValue === '2') {
+                            td.innerHTML = '<span class="status-yellow">Y</span>';
+                        } else if (upperValue.includes('R') || upperValue.includes('RED') || upperValue === '3') {
+                            td.innerHTML = '<span class="status-red">R</span>';
+                        } else {
+                            td.textContent = value;
+                        }
+                    } else if (isBuildCompleteColumn) {
+                        const upperValue = String(value).toUpperCase().trim();
+                        // Style build complete status values - support both YES/NO/PENDING and R/Y/G formats
+                        if (upperValue === 'YES' || upperValue === 'COMPLETE' || upperValue === 'DONE' || upperValue === 'G') {
+                            td.innerHTML = '<span class="build-complete-yes">YES</span>';
+                        } else if (upperValue === 'NO' || upperValue === 'N' || upperValue === 'INCOMPLETE' || upperValue === 'NOT COMPLETE' || upperValue === 'R') {
+                            td.innerHTML = '<span class="build-complete-no">NO</span>';
+                        } else if (upperValue === 'PENDING' || upperValue === 'IN PROGRESS' || upperValue === 'WIP' || upperValue === 'Y') {
+                            td.innerHTML = '<span class="build-complete-pending">PENDING</span>';
+                        } else {
+                            td.textContent = value;
+                        }
+                    } else {
+                        // Check if this is a date column - expanded keywords for better coverage
+                        const dateKeywords = ['plan exit', 'rts', 'exit', 'date', 'time', 'deadline', 'due date', 'target date', 
+                                           'rfd', 'start', 'end', 'completion', 'delivery', 'ship', 'milestone', 'phase',
+                                           'business award', 'tool release', 'actual tr', 'dvt2', 'dvt1', 'ppap', 'tr', 'dvt',
+                                           'award', 'release', 'actual'];
+                        const isDateColumn = dateKeywords.some(kw => header.toLowerCase().includes(kw));
+                        
+                        // Debug logging - print all headers to identify the actual column name
+                        if (header.toLowerCase().includes('dvt')) {
+                            console.log('DVT column detected:', header, 'isDateColumn:', isDateColumn, 'Value:', value, 'Type:', typeof value);
+                        }
+                        
+                        if (isDateColumn && value) {
+                            console.log('Applying date formatting for:', header, 'Value:', value);
+                            // Try Excel date number format (e.g., 44927)
+                            const excelDate = parseFloat(value);
+                            if (!isNaN(excelDate) && excelDate > 0 && excelDate < 70000) {
+                                // Excel date: convert to JS date (Excel epoch is 1900-01-01)
+                                const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+                                const formattedDate = jsDate.toISOString().split('T')[0];
+                                console.log('Excel date converted:', excelDate, '->', formattedDate);
+                                td.textContent = formattedDate;
+                            } else {
+                                // Try standard date formats
+                                const dateValue = new Date(value);
+                                if (!isNaN(dateValue.getTime())) {
+                                    const formattedDate = dateValue.toISOString().split('T')[0];
+                                    console.log('Standard date converted:', value, '->', formattedDate);
+                                    td.textContent = formattedDate;
+                                } else {
+                                    // Try parsing common date formats
+                                    const dateStr = String(value).trim();
+                                    // Match YYYY-MM-DD, YYYY/MM/DD, MM/DD/YYYY, DD/MM/YYYY
+                                    const dateMatch = dateStr.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/) || 
+                                                      dateStr.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+                                    if (dateMatch) {
+                                        if (dateMatch[0].includes(dateMatch[1]) && dateMatch[1].length === 4) {
+                                            // YYYY-MM-DD or YYYY/MM/DD
+                                            const formattedDate = `${dateMatch[1]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[3].padStart(2, '0')}`;
+                                            console.log('Pattern date converted:', value, '->', formattedDate);
+                                            td.textContent = formattedDate;
+                                        } else {
+                                            // MM-DD-YYYY or MM/DD/YYYY
+                                            const formattedDate = `${dateMatch[3]}-${dateMatch[1].padStart(2, '0')}-${dateMatch[2].padStart(2, '0')}`;
+                                            console.log('Pattern date converted:', value, '->', formattedDate);
+                                            td.textContent = formattedDate;
+                                        }
+                                    } else {
+                                        console.log('Could not parse date:', value);
+                                        td.textContent = value;
+                                    }
+                                }
+                            }
+                        } else {
+                            td.textContent = value;
+                        }
+                    }
+                    
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+            
+            // Update pagination UI
+            updatePaginationUI();
+        }
+
+        function updatePaginationUI() {
+            const pagination = document.getElementById('pagination');
+            if (filteredData.length === 0) {
+                pagination.style.display = 'none';
+                return;
+            }
+            
+            pagination.style.display = 'flex';
+            
+            const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+            const startIndex = (currentPage - 1) * rowsPerPage + 1;
+            const endIndex = Math.min(currentPage * rowsPerPage, filteredData.length);
+
+            const summary = document.getElementById('pagination-summary');
+            summary.innerHTML = t('paginationSummary', {
+                start: startIndex,
+                end: endIndex,
+                total: filteredData.length,
+            });
+            document.getElementById('page-info').textContent = t('pageInfo', { current: currentPage, total: totalPages });
+            
+            document.getElementById('prev-btn').disabled = currentPage === 1;
+            document.getElementById('next-btn').disabled = currentPage === totalPages;
+        }
+
+        function changePage(delta) {
+            const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+            const newPage = currentPage + delta;
+            
+            if (newPage >= 1 && newPage <= totalPages) {
+                currentPage = newPage;
+                const headers = Object.keys(allData[0] || {});
+                renderTableBody(headers);
+            }
+        }
+
+        function changeRowsPerPage() {
+            const select = document.getElementById('rows-per-page');
+            rowsPerPage = parseInt(select.value);
+            currentPage = 1; // Reset to first page
+            const headers = Object.keys(allData[0] || {});
+            renderTableBody(headers);
+        }
+
+        function applyFilters() {
+            console.log('=== applyFilters called ===');
+            
+            // Reset pagination when filters change
+            currentPage = 1;
+            
+            const lob = document.getElementById('filter-lob');
+            const program = document.getElementById('filter-program');
+            const phase = document.getElementById('filter-phase');
+            const partType = document.getElementById('filter-part-type');
+            const status = document.getElementById('filter-status');
+            const buildComplete = document.getElementById('filter-build-complete');
+            const supplier = document.getElementById('filter-supplier');
+            const feEngineer = document.getElementById('filter-fe-engineer');
+            const devEngineer = document.getElementById('filter-dev-engineer');
+
+            console.log('Filter elements:', {
+                lob: lob,
+                program: program,
+                phase: phase,
+                partType: partType,
+                status: status,
+                buildComplete: buildComplete,
+                supplier: supplier,
+                feEngineer: feEngineer,
+                devEngineer: devEngineer
+            });
+
+            // Get all column names from the data
+            const headers = Object.keys(allData[0] || {});
+            console.log('Headers:', headers);
+            
+            // Find columns that might contain status data
+            const statusColumns = headers.filter(header => {
+                const lowerHeader = header.toLowerCase();
+                return lowerHeader.includes('status') && 
+                       !lowerHeader.includes('build complete') && 
+                       !lowerHeader.includes('aggregate') &&
+                       !lowerHeader.includes('tooling development status');
+            });
+            console.log('Status columns found:', statusColumns);
+
+            console.log('Applying filters with values:', {
+                lob: { value: lob.value, actualColumn: lob.dataset.actualColumn },
+                program: { value: program.value, actualColumn: program.dataset.actualColumn },
+                phase: { value: phase.value, actualColumn: phase.dataset.actualColumn },
+                partType: { value: partType.value, actualColumn: partType.dataset.actualColumn },
+                status: { value: status.value },
+                buildComplete: { value: buildComplete.value, actualColumn: buildComplete.dataset.actualColumn },
+                supplier: { value: supplier.value, actualColumn: supplier.dataset.actualColumn },
+                feEngineer: { value: feEngineer.value, actualColumn: feEngineer.dataset.actualColumn },
+                devEngineer: { value: devEngineer.value, actualColumn: devEngineer.dataset.actualColumn }
+            });
+
+            filteredData = allData.filter(row => {
+                // Apply LOB filter (multi-select)
+                if (lob.value && lob.dataset.actualColumn) {
+                    const selectedValues = Array.from(lob.selectedOptions).map(opt => opt.value);
+                    if (selectedValues.length > 0 && !selectedValues.includes(String(row[lob.dataset.actualColumn]))) return false;
+                }
+                
+                // Apply Program filter (multi-select)
+                if (program.value && program.dataset.actualColumn) {
+                    const selectedValues = Array.from(program.selectedOptions).map(opt => opt.value);
+                    if (selectedValues.length > 0 && !selectedValues.includes(String(row[program.dataset.actualColumn]))) return false;
+                }
+                
+                // Apply Phase filter (multi-select)
+                if (phase.value && phase.dataset.actualColumn) {
+                    const selectedValues = Array.from(phase.selectedOptions).map(opt => opt.value);
+                    if (selectedValues.length > 0 && !selectedValues.includes(String(row[phase.dataset.actualColumn]))) return false;
+                }
+                
+                // Apply Part Type filter (multi-select)
+                if (partType.value && partType.dataset.actualColumn) {
+                    const selectedValues = Array.from(partType.selectedOptions).map(opt => opt.value);
+                    if (selectedValues.length > 0 && !selectedValues.includes(String(row[partType.dataset.actualColumn]))) return false;
+                }
+                
+                // Apply Status filter (multi-select)
+                if (status.value) {
+                    const selectedValues = Array.from(status.selectedOptions).map(opt => opt.value);
+                    const statusMatch = statusColumns.some(col => {
+                        const val = String(row[col] || '').toUpperCase().trim();
+                        return selectedValues.some(selected => {
+                            if (selected === 'G') return val.includes('G') || val.includes('GREEN') || val === '1';
+                            if (selected === 'Y') return val.includes('Y') || val.includes('YELLOW') || val === '2';
+                            if (selected === 'R') return val === 'R' || val === 'RED' || val === '3' || val === 'R ';
+                            return val === selected;
+                        });
+                    });
+                    if (selectedValues.length > 0 && !statusMatch) return false;
+                }
+
+                // Apply Build Complete filter (multi-select)
+                if (buildComplete.value && buildComplete.dataset.actualColumn) {
+                    const selectedValues = Array.from(buildComplete.selectedOptions).map(opt => opt.value);
+                    if (selectedValues.length > 0 && !selectedValues.includes(String(row[buildComplete.dataset.actualColumn]))) return false;
+                }
+                
+                // Apply Supplier filter (multi-select)
+                if (supplier.value && supplier.dataset.actualColumn) {
+                    const selectedValues = Array.from(supplier.selectedOptions).map(opt => opt.value);
+                    if (selectedValues.length > 0 && !selectedValues.includes(String(row[supplier.dataset.actualColumn]))) return false;
+                }
+                
+                // Apply FE Engineer filter (multi-select)
+                if (feEngineer.value && feEngineer.dataset.actualColumn) {
+                    const selectedValues = Array.from(feEngineer.selectedOptions).map(opt => opt.value);
+                    if (selectedValues.length > 0 && !selectedValues.includes(String(row[feEngineer.dataset.actualColumn]))) return false;
+                }
+                
+                // Apply Dev Engineer filter (multi-select)
+                if (devEngineer.value && devEngineer.dataset.actualColumn) {
+                    const selectedValues = Array.from(devEngineer.selectedOptions).map(opt => opt.value);
+                    if (selectedValues.length > 0 && !selectedValues.includes(String(row[devEngineer.dataset.actualColumn]))) return false;
+                }
+                
+                // Apply DGP filter (multi-select)
+                const dgp = document.getElementById('filter-dgp');
+                if (dgp && dgp.value && dgp.dataset.actualColumn) {
+                    const selectedValues = Array.from(dgp.selectedOptions).map(opt => opt.value);
+                    if (selectedValues.length > 0 && !selectedValues.includes(String(row[dgp.dataset.actualColumn]))) return false;
+                }
+                
+                return true;
+            });
+
+            console.log('Filtered data count:', filteredData.length, 'from', allData.length);
+            console.log('=== applyFilters completed ===');
+            
+            renderTableBody(headers);
+            updateStats();
+            updateCharts();
+        }
+
+        async function clearAllData() {
+            const confirmed = confirm(t('clearConfirm'));
+            if (!confirmed) return;
+
+            try {
+                const response = await fetch('/api/records', { method: 'DELETE' });
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.error || 'Failed to clear server data');
+                }
+            } catch (error) {
+                alert(t('clearFailed', { message: error.message }));
+                return;
+            }
+
+            // Clear data arrays first
+            allData = [];
+            filteredData = [];
+            
+            // Reset pagination
+            currentPage = 1;
+            
+            // Clear UI elements
+            document.getElementById('file-name').textContent = '';
+            document.getElementById('upload-progress').textContent = '';
+            document.getElementById('file-input').value = '';
+            
+            // Clear all filters and disable them
+            const filters = ['filter-lob', 'filter-program', 'filter-phase', 'filter-part-type', 'filter-status', 'filter-build-complete', 'filter-supplier', 'filter-fe-engineer', 'filter-dev-engineer'];
+            filters.forEach(filterId => {
+                const select = document.getElementById(filterId);
+                if (select) {
+                    select.value = '';
+                    select.disabled = true;
+                    select.innerHTML = '<option value="">All</option>';
+                }
+            });
+            document.getElementById('search-input').value = '';
+            
+            // Clear table
+            document.getElementById('table-header').innerHTML = '';
+            document.getElementById('table-body').innerHTML = '';
+            
+            // Reset stats to 0
+            document.getElementById('stat-total').textContent = '0';
+            document.getElementById('stat-green').textContent = '0';
+            document.getElementById('stat-yellow').textContent = '0';
+            document.getElementById('stat-red').textContent = '0';
+            
+            // Hide pagination
+            document.getElementById('pagination').style.display = 'none';
+            
+            // Show no data message
+            document.getElementById('no-data').style.display = 'block';
+            
+            // Clear charts
+            if (statusChart) {
+                statusChart.destroy();
+                statusChart = null;
+            }
+            if (barChart) {
+                barChart.destroy();
+                barChart = null;
+            }
+            if (statusByPartTypeChart) {
+                statusByPartTypeChart.destroy();
+                statusByPartTypeChart = null;
+            }
+            if (statusBySupplierChart) {
+                statusBySupplierChart.destroy();
+                statusBySupplierChart = null;
+            }
+            if (statusTrendChart) {
+                statusTrendChart.destroy();
+                statusTrendChart = null;
+            }
+            if (supplierRiskTrendChart) {
+                supplierRiskTrendChart.destroy();
+                supplierRiskTrendChart = null;
+            }
+
+            // Hide charts section
+            document.getElementById('charts-section').style.display = 'none';
+
+            // Clear local browser cache copy
+            localStorage.removeItem('toolingDashboardData');
+            localStorage.removeItem('toolingDashboardFilteredData');
+            clearDB().then(() => {
+                console.log('Cleared IndexedDB');
+            }).catch(err => {
+                console.error('Error clearing IndexedDB:', err);
+            });
+
+            loadImportHistory();
+
+            console.log('All data cleared');
+        }
+
+        function navigateToDetailPageByStatus(status) {
+            const headers = Object.keys(allData[0] || {});
+            const statusColumns = headers.filter(header => {
+                const lowerHeader = header.toLowerCase();
+                return lowerHeader.includes('status') && 
+                       !lowerHeader.includes('build complete') && 
+                       !lowerHeader.includes('aggregate') &&
+                       !lowerHeader.includes('tooling development status');
+            });
+            
+            const statusValue = status === 'Red' ? 'R' : 'Y';
+            const filteredByStatus = allData.filter(row => {
+                return statusColumns.some(col => {
+                    const val = String(row[col] || '').toUpperCase().trim();
+                    if (statusValue === 'R') {
+                        const isRed = val === 'R' || val === 'RED' || val === '3' || val === 'R ';
+                        return isRed;
+                    } else {
+                        const isYellow = val === 'Y' || val === 'YELLOW' || val === '2';
+                        return isYellow;
+                    }
+                });
+            });
+            
+            if (filteredByStatus.length === 0) {
+                alert(t('noRecordsSelectedStatus'));
+                return;
+            }
+            
+            // Save filtered data and navigate to detail page
+            try {
+                localStorage.setItem('toolingDashboardData', JSON.stringify(allData));
+                localStorage.setItem('toolingDashboardFilteredData', JSON.stringify(filteredByStatus));
+            } catch (error) {
+                console.error('Error saving to localStorage, using IndexedDB instead:', error);
+                // Fall back to IndexedDB for larger datasets
+                Promise.all([
+                    saveToDB('allData', allData),
+                    saveToDB('filteredData', filteredByStatus)
+                ]).then(() => {
+                    console.log('Saved data to IndexedDB');
+                }).catch(err => {
+                    console.error('Error saving to IndexedDB:', err);
+                });
+            }
+            window.location.href = 'tooling_table.html';
+        }
+
+        function resetFilters() {
+            document.getElementById('filter-lob').value = '';
+            document.getElementById('filter-program').value = '';
+            document.getElementById('filter-phase').value = '';
+            document.getElementById('filter-part-type').value = '';
+            document.getElementById('filter-status').value = '';
+            document.getElementById('filter-build-complete').value = '';
+            document.getElementById('filter-supplier').value = '';
+            document.getElementById('filter-fe-engineer').value = '';
+            document.getElementById('filter-dev-engineer').value = '';
+            document.getElementById('search-input').value = '';
+            
+            // Reset pagination
+            currentPage = 1;
+            
+            // Only update if there's data
+            if (allData.length > 0) {
+                filteredData = [...allData];
+                const headers = Object.keys(allData[0] || {});
+                if (headers.length > 0) {
+                    renderTableBody(headers);
+                }
+                updateStats();
+                updateCharts();
+            }
+        }
+
+        function searchTable() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            
+            // Reset pagination when searching
+            currentPage = 1;
+            
+            if (searchTerm === '') {
+                applyFilters();
+                return;
+            }
+
+            const headers = Object.keys(allData[0] || {});
+            filteredData = allData.filter(row => {
+                return headers.some(header => {
+                    const value = String(row[header] || '').toLowerCase();
+                    return value.includes(searchTerm);
+                });
+            });
+
+            renderTableBody(headers);
+            updateStats();
+        }
+
+        function sortTable(columnIndex) {
+            const headers = Object.keys(allData[0] || {});
+            const column = headers[columnIndex];
+
+            if (sortColumn === columnIndex) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = columnIndex;
+                sortDirection = 'asc';
+            }
+
+            filteredData.sort((a, b) => {
+                const aVal = a[column] || '';
+                const bVal = b[column] || '';
+                
+                if (typeof aVal === 'number' && typeof bVal === 'number') {
+                    return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+                }
+                
+                const aStr = String(aVal).toLowerCase();
+                const bStr = String(bVal).toLowerCase();
+                
+                if (sortDirection === 'asc') {
+                    return aStr.localeCompare(bStr);
+                } else {
+                    return bStr.localeCompare(aStr);
+                }
+            });
+
+            renderTableBody(headers);
+        }
+
+        function updateStats() {
+            document.getElementById('stat-total').textContent = filteredData.length;
+            
+            // Get all column names from the data
+            const headers = Object.keys(allData[0] || {});
+            
+            // Find columns that might contain status data
+            const statusColumns = headers.filter(header => {
+                const lowerHeader = header.toLowerCase();
+                return lowerHeader.includes('status') || 
+                       lowerHeader.includes('r.y.g') || 
+                       lowerHeader.includes('ryg') ||
+                       lowerHeader.includes('r y g') ||
+                       lowerHeader.includes('(r.y.g)') ||
+                       lowerHeader.includes('r/y/g');
+            });
+            
+            console.log('Found status columns:', statusColumns);
+            
+            // Log sample status values for debugging
+            if (statusColumns.length > 0 && filteredData.length > 0) {
+                const sampleValues = filteredData.slice(0, 5).map(row => {
+                    const statusObj = {};
+                    statusColumns.forEach(col => {
+                        statusObj[col] = row[col];
+                    });
+                    return statusObj;
+                });
+                console.log('Sample status values:', sampleValues);
+            }
+            
+            const greenCount = filteredData.filter(row => {
+                return statusColumns.some(col => {
+                    const val = String(row[col] || '').toUpperCase().trim();
+                    return val.includes('G') || val.includes('GREEN') || val === '1';
+                });
+            }).length;
+            document.getElementById('stat-green').textContent = greenCount;
+            
+            const yellowCount = filteredData.filter(row => {
+                return statusColumns.some(col => {
+                    const val = String(row[col] || '').toUpperCase().trim();
+                    return val.includes('Y') || val.includes('YELLOW') || val === '2';
+                });
+            }).length;
+            document.getElementById('stat-yellow').textContent = yellowCount;
+            
+            const redCount = filteredData.filter(row => {
+                return statusColumns.some(col => {
+                    const val = String(row[col] || '').toUpperCase().trim();
+                    // More specific R matching to avoid false positives
+                    const isRed = val === 'R' || val === 'RED' || val === '3' || val === 'R ';
+                    return isRed;
+                });
+            }).length;
+            document.getElementById('stat-red').textContent = redCount;
+            
+            console.log('Status counts - Green:', greenCount, 'Yellow:', yellowCount, 'Red:', redCount);
+        }
+
+        // Show no data message initially
+        document.getElementById('no-data').style.display = 'block';
+    </script>
+</body>
+</html>
