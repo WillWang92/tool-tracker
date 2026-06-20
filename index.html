@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tooling Tracker Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+            color: white;
+            padding: 20px 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .header .subtitle {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+
+        .container {
+            display: flex;
+            min-height: calc(100vh - 80px);
+        }
+
+        .sidebar {
+            width: 280px;
+            background: white;
+            padding: 20px;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .filter-group {
+            margin-bottom: 15px;
+        }
+
+        .filter-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            font-size: 13px;
+            color: #333;
+        }
+
+        .filter-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .filter-buttons button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .btn-reset {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-apply {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .file-upload {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .stats-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .stat-card h4 {
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .stat-card.green .value {
+            color: #10b981;
+        }
+
+        .stat-card.yellow .value {
+            color: #f59e0b;
+        }
+
+        .stat-card.red .value {
+            color: #ef4444;
+        }
+
+        .data-table {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 16px;
+            color: #666;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .config-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .config-section input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .config-section button {
+            padding: 10px 20px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Tooling Tracker Dashboard</h1>
+        <div class="subtitle">Static Version - GitHub Pages</div>
+    </div>
+
+    <div class="container">
+        <div class="sidebar">
+            <div class="filter-group">
+                <label for="excel-url">Excel File URL</label>
+                <input type="text" id="excel-url" placeholder="Enter SharePoint/OneDrive Excel URL" 
+                       style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;">
+            </div>
+            
+            <div class="filter-group">
+                <label for="filter-lob">LOB</label>
+                <select id="filter-lob">
+                    <option value="">All</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="filter-program">Program</label>
+                <select id="filter-program">
+                    <option value="">All</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="filter-phase">Phase</label>
+                <select id="filter-phase">
+                    <option value="">All</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="filter-status">Status</label>
+                <select id="filter-status">
+                    <option value="">All</option>
+                    <option value="G">Green</option>
+                    <option value="Y">Yellow</option>
+                    <option value="R">Red</option>
+                </select>
+            </div>
+
+            <div class="filter-buttons">
+                <button class="btn-reset" onclick="resetFilters()">Reset</button>
+                <button class="btn-apply" onclick="applyFilters()">Apply</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="config-section">
+                <h3 style="margin-bottom: 15px;">Excel Data Source</h3>
+                <p style="margin-bottom: 10px; font-size: 13px; color: #666;">
+                    Enter the URL of your Excel file stored in SharePoint or OneDrive. 
+                    The file should be shared with appropriate permissions.
+                </p>
+                <input type="text" id="main-excel-url" placeholder="https://yourcompany.sharepoint.com/.../file.xlsx">
+                <button onclick="loadExcelData()">Load Excel Data</button>
+                <div id="loading-status" style="margin-top: 10px; font-size: 13px; color: #666;"></div>
+            </div>
+
+            <div id="error-message" class="error" style="display: none;"></div>
+
+            <div class="stats-cards">
+                <div class="stat-card">
+                    <h4>Total Records</h4>
+                    <div class="value" id="stat-total">0</div>
+                </div>
+                <div class="stat-card green">
+                    <h4>Green Status</h4>
+                    <div class="value" id="stat-green">0</div>
+                </div>
+                <div class="stat-card yellow">
+                    <h4>Yellow Status</h4>
+                    <div class="value" id="stat-yellow">0</div>
+                </div>
+                <div class="stat-card red">
+                    <h4>Red Status</h4>
+                    <div class="value" id="stat-red">0</div>
+                </div>
+            </div>
+
+            <div class="data-table">
+                <div id="loading-indicator" class="loading" style="display: none;">
+                    Loading Excel data...
+                </div>
+                <div id="table-container" style="display: none;">
+                    <table id="data-table">
+                        <thead id="table-head"></thead>
+                        <tbody id="table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allData = [];
+        let filteredData = [];
+        let columns = [];
+
+        // Load Excel data from URL
+        async function loadExcelData() {
+            const url = document.getElementById('main-excel-url').value;
+            if (!url) {
+                showError('Please enter an Excel file URL');
+                return;
+            }
+
+            const loadingStatus = document.getElementById('loading-status');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const errorMessage = document.getElementById('error-message');
+            
+            loadingStatus.textContent = 'Loading Excel data...';
+            loadingIndicator.style.display = 'block';
+            errorMessage.style.display = 'none';
+
+            try {
+                const response = await fetch(url, {
+                    credentials: 'include',
+                    mode: 'cors'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch Excel file: ${response.status}`);
+                }
+
+                const buffer = await response.arrayBuffer();
+                const workbook = XLSX.read(buffer, { type: 'array' });
+                
+                // Get first sheet
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                
+                // Convert to JSON
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                
+                if (jsonData.length < 3) {
+                    throw new Error('Excel file does not have enough data');
+                }
+
+                // Assuming row 0-1 are headers, data starts from row 2 (index 2)
+                const headers = jsonData[2];
+                const dataRows = jsonData.slice(3);
+                
+                // Convert to array of objects
+                allData = dataRows.map(row => {
+                    const obj = {};
+                    headers.forEach((header, index) => {
+                        obj[header] = row[index];
+                    });
+                    return obj;
+                }).filter(row => Object.values(row).some(val => val !== undefined && val !== null && val !== ''));
+
+                columns = headers;
+                filteredData = [...allData];
+                
+                populateFilters();
+                renderTable();
+                updateStats();
+                
+                loadingStatus.textContent = 'Data loaded successfully!';
+                loadingIndicator.style.display = 'none';
+                
+            } catch (error) {
+                console.error('Error loading Excel:', error);
+                showError(`Error loading Excel data: ${error.message}`);
+                loadingStatus.textContent = 'Error loading data';
+                loadingIndicator.style.display = 'none';
+            }
+        }
+
+        function showError(message) {
+            const errorMessage = document.getElementById('error-message');
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+
+        function populateFilters() {
+            const uniqueValues = (column) => {
+                return [...new Set(allData.map(row => row[column]).filter(val => val))];
+            };
+
+            const populateSelect = (selectId, column) => {
+                const select = document.getElementById(selectId);
+                select.innerHTML = '<option value="">All</option>';
+                uniqueValues(column).forEach(value => {
+                    if (value) {
+                        const option = document.createElement('option');
+                        option.value = value;
+                        option.textContent = value;
+                        select.appendChild(option);
+                    }
+                });
+            };
+
+            populateSelect('filter-lob', 'LOB');
+            populateSelect('filter-program', 'Program');
+            populateSelect('filter-phase', 'Phase');
+        }
+
+        function applyFilters() {
+            const lobFilter = document.getElementById('filter-lob').value;
+            const programFilter = document.getElementById('filter-program').value;
+            const phaseFilter = document.getElementById('filter-phase').value;
+            const statusFilter = document.getElementById('filter-status').value;
+
+            filteredData = allData.filter(row => {
+                if (lobFilter && row['LOB'] !== lobFilter) return false;
+                if (programFilter && row['Program'] !== programFilter) return false;
+                if (phaseFilter && row['Phase'] !== phaseFilter) return false;
+                if (statusFilter && row['Status (R Y G)'] !== statusFilter) return false;
+                return true;
+            });
+
+            renderTable();
+            updateStats();
+        }
+
+        function resetFilters() {
+            document.getElementById('filter-lob').value = '';
+            document.getElementById('filter-program').value = '';
+            document.getElementById('filter-phase').value = '';
+            document.getElementById('filter-status').value = '';
+            filteredData = [...allData];
+            renderTable();
+            updateStats();
+        }
+
+        function renderTable() {
+            const tableHead = document.getElementById('table-head');
+            const tableBody = document.getElementById('table-body');
+            const tableContainer = document.getElementById('table-container');
+
+            if (filteredData.length === 0) {
+                tableContainer.style.display = 'none';
+                return;
+            }
+
+            tableContainer.style.display = 'block';
+
+            // Render headers
+            tableHead.innerHTML = '';
+            const headerRow = document.createElement('tr');
+            columns.forEach(column => {
+                const th = document.createElement('th');
+                th.textContent = column;
+                headerRow.appendChild(th);
+            });
+            tableHead.appendChild(headerRow);
+
+            // Render body (limit to first 100 rows for performance)
+            tableBody.innerHTML = '';
+            const displayData = filteredData.slice(0, 100);
+            displayData.forEach(row => {
+                const tr = document.createElement('tr');
+                columns.forEach(column => {
+                    const td = document.createElement('td');
+                    td.textContent = row[column] || '';
+                    tr.appendChild(td);
+                });
+                tableBody.appendChild(tr);
+            });
+
+            if (filteredData.length > 100) {
+                const infoRow = document.createElement('tr');
+                const infoCell = document.createElement('td');
+                infoCell.colSpan = columns.length;
+                infoCell.textContent = `Showing 100 of ${filteredData.length} records`;
+                infoCell.style.textAlign = 'center';
+                infoCell.style.fontStyle = 'italic';
+                infoCell.style.color = '#666';
+                infoRow.appendChild(infoCell);
+                tableBody.appendChild(infoRow);
+            }
+        }
+
+        function updateStats() {
+            const statusColumn = 'Status (R Y G)';
+            const greenCount = filteredData.filter(row => row[statusColumn] === 'G').length;
+            const yellowCount = filteredData.filter(row => row[statusColumn] === 'Y').length;
+            const redCount = filteredData.filter(row => row[statusColumn] === 'R').length;
+
+            document.getElementById('stat-total').textContent = filteredData.length;
+            document.getElementById('stat-green').textContent = greenCount;
+            document.getElementById('stat-yellow').textContent = yellowCount;
+            document.getElementById('stat-red').textContent = redCount;
+        }
+
+        // Load saved URL from localStorage
+        window.onload = function() {
+            const savedUrl = localStorage.getItem('excelUrl');
+            if (savedUrl) {
+                document.getElementById('main-excel-url').value = savedUrl;
+            }
+        };
+
+        // Save URL to localStorage when loading
+        const originalLoadExcelData = loadExcelData;
+        loadExcelData = function() {
+            const url = document.getElementById('main-excel-url').value;
+            localStorage.setItem('excelUrl', url);
+            originalLoadExcelData();
+        };
+    </script>
+</body>
+</html>
