@@ -516,13 +516,23 @@
         <div class="main-content">
             <div class="file-upload">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <label for="file-input" id="upload-label" style="margin: 0; font-weight: 600; color: #333;">📁 Upload</label>
+                    <label for="file-input" id="upload-label" style="margin: 0; font-weight: 600; color: #333;">📁 Upload Excel Files</label>
                     <div id="last-update-time" style="font-size: 12px; color: #666; font-weight: 500;">Last Update: --</div>
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; gap: 15px;">
-                    <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFileUpload(event)" multiple style="padding: 6px 12px; font-size: 12px;">
-                    <input type="file" id="folder-input" webkitdirectory directory multiple accept=".xlsx,.xls" onchange="handleFolderUpload(event)" style="padding: 6px 12px; font-size: 12px;">
-                    <button id="btn-clear" onclick="clearAllData()" style="padding: 8px 16px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">Clear</button>
+                <div style="margin-bottom: 15px;">
+                    <div style="display: flex; gap: 10px;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 12px; color: #666; display: block; margin-bottom: 5px;">Single File:</label>
+                            <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFileUpload(event)" multiple style="width: 100%; padding: 6px 12px; font-size: 12px;">
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 12px; color: #666; display: block; margin-bottom: 5px;">Folder (All Excel files):</label>
+                            <input type="file" id="folder-input" webkitdirectory directory multiple accept=".xlsx,.xls" onchange="handleFolderUpload(event)" style="width: 100%; padding: 6px 12px; font-size: 12px;">
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <button id="btn-clear" onclick="clearAllData()" style="padding: 8px 16px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">Clear All Data</button>
                 </div>
                 <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center; gap: 15px;">
                     <div style="flex: 1;">
@@ -3337,23 +3347,30 @@
         }
 
         async function clearAllData() {
-            const confirmed = confirm(t('clearConfirm'));
+            const confirmed = confirm('Are you sure you want to clear all data? This will remove all uploaded data and history.');
             if (!confirmed) return;
 
             try {
-                const response = await fetch('/api/records', { method: 'DELETE' });
-                const payload = await response.json();
-                if (!response.ok) {
-                    throw new Error(payload.error || 'Failed to clear server data');
+                // Clear data from localStorage
+                localStorage.removeItem('toolingDashboardData');
+                localStorage.removeItem('toolingDashboardImportHistory');
+                localStorage.removeItem('toolingDashboardLastUpdateTime');
+                
+                // Clear data from IndexedDB
+                try {
+                    await clearDB();
+                } catch (error) {
+                    console.error('Error clearing IndexedDB:', error);
                 }
             } catch (error) {
-                alert(t('clearFailed', { message: error.message }));
+                alert('Failed to clear data: ' + error.message);
                 return;
             }
 
             // Clear data arrays first
             allData = [];
             filteredData = [];
+            importHistory = [];
             
             // Reset pagination
             currentPage = 1;
@@ -3391,6 +3408,9 @@
             // Show no data message
             document.getElementById('no-data').style.display = 'block';
             
+            // Hide charts section
+            document.getElementById('charts-section').style.display = 'none';
+            
             // Clear charts
             if (statusChart) {
                 statusChart.destroy();
@@ -3416,22 +3436,14 @@
                 supplierRiskTrendChart.destroy();
                 supplierRiskTrendChart = null;
             }
-
-            // Hide charts section
-            document.getElementById('charts-section').style.display = 'none';
-
-            // Clear local browser cache copy
-            localStorage.removeItem('toolingDashboardData');
-            localStorage.removeItem('toolingDashboardFilteredData');
-            clearDB().then(() => {
-                console.log('Cleared IndexedDB');
-            }).catch(err => {
-                console.error('Error clearing IndexedDB:', err);
-            });
-
-            loadImportHistory();
-
-            console.log('All data cleared');
+            
+            // Render empty import history
+            renderImportHistory();
+            
+            // Reset last update time
+            document.getElementById('last-update-time').textContent = 'Last Update: --';
+            
+            alert('All data has been cleared successfully.');
         }
 
         function navigateToDetailPageByStatus(status) {
