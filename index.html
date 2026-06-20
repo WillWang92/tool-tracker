@@ -860,6 +860,17 @@
             updateCharts();
         }
 
+        // API Configuration - Change this to your deployed Flask backend URL
+        const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:5000'
+            : 'https://your-flask-backend-url.com'; // Replace with your deployed backend URL
+
+        // Admin credentials for upload operations (only you can upload)
+        const ADMIN_CREDENTIALS = {
+            username: 'admin',
+            password: 'cte2024'
+        };
+
         // Load saved data from localStorage on page load
         window.addEventListener('DOMContentLoaded', function() {
             console.log('DOM Content Loaded, starting data load...');
@@ -873,40 +884,38 @@
 
         async function loadSavedData() {
             try {
-                // Load from localStorage instead of backend API
-                const savedData = localStorage.getItem('toolingDashboardData');
-                if (savedData) {
-                    allData = JSON.parse(savedData);
-                    filteredData = [...allData];
+                // Load from backend API
+                const response = await fetch(`${API_BASE_URL}/api/records`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const payload = await response.json();
+                
+                allData = payload.records;
+                filteredData = [...allData];
 
-                    const headers = Object.keys(allData[0] || {}).filter(h => !h.startsWith('_'));
-                    if (headers.length > 0) {
-                        populateFilters(headers);
-                        renderTable(headers);
-                        updateStats();
-                        updateCharts();
-                        document.getElementById('no-data').style.display = 'none';
-                        document.getElementById('file-name').textContent = `Loaded ${allData.length} records from local storage`;
-                    } else {
-                        document.getElementById('table-header').innerHTML = '';
-                        document.getElementById('table-body').innerHTML = '';
-                        document.getElementById('no-data').style.display = 'block';
-                        document.getElementById('pagination').style.display = 'none';
-                        updateStats();
-                        updateCharts();
-                    }
-
-                    updateLastUpdateTime();
+                const headers = Object.keys(allData[0] || {}).filter(h => !h.startsWith('_'));
+                if (headers.length > 0) {
+                    populateFilters(headers);
+                    renderTable(headers);
+                    updateStats();
+                    updateCharts();
+                    document.getElementById('no-data').style.display = 'none';
+                    document.getElementById('file-name').textContent = `Loaded ${allData.length} records from server`;
                 } else {
+                    document.getElementById('table-header').innerHTML = '';
+                    document.getElementById('table-body').innerHTML = '';
                     document.getElementById('no-data').style.display = 'block';
-                    document.getElementById('file-name').textContent = 'No data loaded. Please upload Excel files.';
+                    document.getElementById('pagination').style.display = 'none';
                     updateStats();
                     updateCharts();
                 }
+
+                updateLastUpdateTime();
             } catch (error) {
-                console.error('Error loading saved data:', error);
+                console.error('Error loading data from API:', error);
                 document.getElementById('no-data').style.display = 'block';
-                document.getElementById('file-name').textContent = 'No data loaded. Please upload Excel files.';
+                document.getElementById('file-name').textContent = 'Failed to load data from server. Please check connection.';
                 updateStats();
                 updateCharts();
             }
@@ -2551,65 +2560,48 @@
                 return;
             }
 
-            document.getElementById('file-name').textContent = `Selected ${excelFiles.length} Excel file(s)`;
+            document.getElementById('file-name').textContent = `Uploading ${excelFiles.length} Excel file(s)...`;
             document.getElementById('upload-progress').textContent = `Processing ${excelFiles.length} file(s)...`;
 
             try {
-                let totalRows = 0;
-                let allNewData = [];
+                // Upload files to backend API with admin credentials
+                const formData = new FormData();
+                excelFiles.forEach(file => {
+                    formData.append('files', file);
+                });
 
-                for (const file of excelFiles) {
-                    const buffer = await readFileAsArrayBuffer(file);
-                    const workbook = XLSX.read(buffer, { type: 'array' });
-                    
-                    const sheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[sheetName];
-                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                    
-                    if (jsonData.length < 3) continue;
+                const authHeader = 'Basic ' + btoa(ADMIN_CREDENTIALS.username + ':' + ADMIN_CREDENTIALS.password);
+                
+                const response = await fetch(`${API_BASE_URL}/api/upload`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': authHeader
+                    },
+                    body: formData
+                });
 
-                    const headers = jsonData[2];
-                    const dataRows = jsonData.slice(3);
-                    
-                    const fileData = dataRows.map(row => {
-                        const obj = {};
-                        headers.forEach((header, index) => {
-                            obj[header] = row[index];
-                        });
-                        obj['_sourceFile'] = file.name;
-                        obj['_importDate'] = new Date().toISOString();
-                        return obj;
-                    }).filter(row => Object.values(row).some(val => val !== undefined && val !== null && val !== ''));
-                    
-                    allNewData = allNewData.concat(fileData);
-                    totalRows += fileData.length;
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Upload failed');
                 }
 
-                if (allNewData.length === 0) {
-                    throw new Error('No valid data found in Excel files');
-                }
-
-                // Append to existing data
-                allData = allData.concat(allNewData);
-                filteredData = [...allData];
+                const result = await response.json();
                 
-                // Save to localStorage
-                saveData();
+                // Reload data from server
+                await loadSavedData();
+                await loadImportHistory();
                 
-                // Update UI
                 const headers = Object.keys(allData[0] || {}).filter(h => !h.startsWith('_'));
                 populateFilters(headers);
                 renderTable(headers);
                 updateStats();
                 updateCharts();
                 
-                document.getElementById('upload-progress').textContent = `Completed: ${excelFiles.length} files, ${totalRows} rows added`;
+                document.getElementById('upload-progress').textContent = `Completed: ${result.rows_inserted} rows added from ${result.uploaded_files.length} file(s)`;
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('file-input').value = '';
+                document.getElementById('file-name').textContent = `Uploaded: ${result.uploaded_files.join(', ')}`;
                 updateLastUpdateTime();
-                
-                // Add to import history
-                addImportHistory(excelFiles, totalRows);
                 
             } catch (error) {
                 document.getElementById('loading').style.display = 'none';
@@ -2636,67 +2628,48 @@
                 return;
             }
 
-            document.getElementById('file-name').textContent = `Found ${excelFiles.length} Excel files in folder`;
-            document.getElementById('upload-progress').textContent = `Processing ${excelFiles.length} files from folder...`;
+            document.getElementById('file-name').textContent = `Uploading ${excelFiles.length} Excel file(s) from folder...`;
+            document.getElementById('upload-progress').textContent = `Processing ${excelFiles.length} file(s)...`;
 
             try {
-                let totalRows = 0;
-                let allNewData = [];
+                // Upload files to backend API with admin credentials
+                const formData = new FormData();
+                excelFiles.forEach(file => {
+                    formData.append('files', file);
+                });
 
-                for (const file of excelFiles) {
-                    document.getElementById('upload-progress').textContent = `Processing: ${file.name}...`;
-                    
-                    const buffer = await readFileAsArrayBuffer(file);
-                    const workbook = XLSX.read(buffer, { type: 'array' });
-                    
-                    const sheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[sheetName];
-                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                    
-                    if (jsonData.length < 3) continue;
+                const authHeader = 'Basic ' + btoa(ADMIN_CREDENTIALS.username + ':' + ADMIN_CREDENTIALS.password);
+                
+                const response = await fetch(`${API_BASE_URL}/api/upload`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': authHeader
+                    },
+                    body: formData
+                });
 
-                    const headers = jsonData[2];
-                    const dataRows = jsonData.slice(3);
-                    
-                    const fileData = dataRows.map(row => {
-                        const obj = {};
-                        headers.forEach((header, index) => {
-                            obj[header] = row[index];
-                        });
-                        obj['_sourceFile'] = file.name;
-                        obj['_importDate'] = new Date().toISOString();
-                        return obj;
-                    }).filter(row => Object.values(row).some(val => val !== undefined && val !== null && val !== ''));
-                    
-                    allNewData = allNewData.concat(fileData);
-                    totalRows += fileData.length;
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Upload failed');
                 }
 
-                if (allNewData.length === 0) {
-                    throw new Error('No valid data found in Excel files');
-                }
-
-                // Append to existing data
-                allData = allData.concat(allNewData);
-                filteredData = [...allData];
+                const result = await response.json();
                 
-                // Save to localStorage
-                saveData();
+                // Reload data from server
+                await loadSavedData();
+                await loadImportHistory();
                 
-                // Update UI
                 const headers = Object.keys(allData[0] || {}).filter(h => !h.startsWith('_'));
                 populateFilters(headers);
                 renderTable(headers);
                 updateStats();
                 updateCharts();
                 
-                document.getElementById('upload-progress').textContent = `Completed: ${excelFiles.length} files, ${totalRows} rows added`;
+                document.getElementById('upload-progress').textContent = `Completed: ${result.rows_inserted} rows added from ${result.uploaded_files.length} file(s)`;
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('folder-input').value = '';
+                document.getElementById('file-name').textContent = `Uploaded from folder: ${result.uploaded_files.length} files`;
                 updateLastUpdateTime();
-                
-                // Add to import history
-                addImportHistory(excelFiles, totalRows);
                 
             } catch (error) {
                 document.getElementById('loading').style.display = 'none';
@@ -2737,17 +2710,16 @@
 
         async function loadImportHistory() {
             try {
-                // Load from localStorage instead of backend API
-                const savedHistory = localStorage.getItem('toolingDashboardImportHistory');
-                if (savedHistory) {
-                    importHistory = JSON.parse(savedHistory);
-                    renderImportHistory();
-                } else {
-                    importHistory = [];
-                    renderImportHistory();
+                // Load from backend API
+                const response = await fetch(`${API_BASE_URL}/api/imports`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
+                const payload = await response.json();
+                importHistory = payload.imports;
+                renderImportHistory();
             } catch (error) {
-                console.error('Error loading import history:', error);
+                console.error('Error loading import history from API:', error);
                 importHistory = [];
                 renderImportHistory();
             }
@@ -2781,23 +2753,28 @@
 
         async function deleteImportBatch(importId) {
             const match = importHistory.find(item => item.id === importId);
-            const sourceFile = match ? match.file : 'selected import';
+            const sourceFile = match ? match.source_file : 'selected import';
             const confirmed = confirm(`Delete import #${importId} from '${sourceFile}'? This will remove all data from that import.`);
             if (!confirmed) return;
 
             try {
-                // Remove from import history
-                importHistory = importHistory.filter(item => item.id !== importId);
-                localStorage.setItem('toolingDashboardImportHistory', JSON.stringify(importHistory));
+                // Call backend API to delete import with admin credentials
+                const authHeader = 'Basic ' + btoa(ADMIN_CREDENTIALS.username + ':' + ADMIN_CREDENTIALS.password);
+                const response = await fetch(`${API_BASE_URL}/api/imports/${importId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': authHeader
+                    }
+                });
                 
-                // Remove data from allData
-                allData = allData.filter(row => row._importId !== importId);
-                filteredData = [...allData];
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
                 
-                // Save updated data
-                saveData();
+                // Reload data from server
+                await loadSavedData();
+                await loadImportHistory();
                 
-                // Update UI
                 const headers = Object.keys(allData[0] || {}).filter(h => !h.startsWith('_'));
                 if (headers.length > 0) {
                     populateFilters(headers);
@@ -2806,7 +2783,7 @@
                     updateCharts();
                 }
                 
-                renderImportHistory();
+                alert('Import deleted successfully');
             } catch (error) {
                 console.error('Error deleting import:', error);
                 alert('Failed to delete import');
@@ -3345,99 +3322,100 @@
             if (!confirmed) return;
 
             try {
-                // Clear data from localStorage
-                localStorage.removeItem('toolingDashboardData');
-                localStorage.removeItem('toolingDashboardImportHistory');
-                localStorage.removeItem('toolingDashboardLastUpdateTime');
+                // Call backend API to clear all data with admin credentials
+                const authHeader = 'Basic ' + btoa(ADMIN_CREDENTIALS.username + ':' + ADMIN_CREDENTIALS.password);
+                const response = await fetch(`${API_BASE_URL}/api/records`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': authHeader
+                    }
+                });
                 
-                // Clear data from IndexedDB
-                try {
-                    await clearDB();
-                } catch (error) {
-                    console.error('Error clearing IndexedDB:', error);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
+                
+                // Clear data arrays
+                allData = [];
+                filteredData = [];
+                importHistory = [];
+                
+                // Reset pagination
+                currentPage = 1;
+                
+                // Clear UI elements
+                document.getElementById('file-name').textContent = '';
+                document.getElementById('upload-progress').textContent = '';
+                document.getElementById('file-input').value = '';
+                
+                // Clear all filters and disable them
+                const filters = ['filter-lob', 'filter-program', 'filter-phase', 'filter-part-type', 'filter-status', 'filter-build-complete', 'filter-supplier', 'filter-fe-engineer', 'filter-dev-engineer'];
+                filters.forEach(filterId => {
+                    const select = document.getElementById(filterId);
+                    if (select) {
+                        select.value = '';
+                        select.disabled = true;
+                        select.innerHTML = '<option value="">All</option>';
+                    }
+                });
+                document.getElementById('search-input').value = '';
+                
+                // Clear table
+                document.getElementById('table-header').innerHTML = '';
+                document.getElementById('table-body').innerHTML = '';
+                
+                // Reset stats to 0
+                document.getElementById('stat-total').textContent = '0';
+                document.getElementById('stat-green').textContent = '0';
+                document.getElementById('stat-yellow').textContent = '0';
+                document.getElementById('stat-red').textContent = '0';
+                
+                // Hide pagination
+                document.getElementById('pagination').style.display = 'none';
+                
+                // Show no data message
+                document.getElementById('no-data').style.display = 'block';
+                
+                // Hide charts section
+                document.getElementById('charts-section').style.display = 'none';
+                
+                // Clear charts
+                if (statusChart) {
+                    statusChart.destroy();
+                    statusChart = null;
+                }
+                if (barChart) {
+                    barChart.destroy();
+                    barChart = null;
+                }
+                if (statusByPartTypeChart) {
+                    statusByPartTypeChart.destroy();
+                    statusByPartTypeChart = null;
+                }
+                if (statusBySupplierChart) {
+                    statusBySupplierChart.destroy();
+                    statusBySupplierChart = null;
+                }
+                if (statusTrendChart) {
+                    statusTrendChart.destroy();
+                    statusTrendChart = null;
+                }
+                if (supplierRiskTrendChart) {
+                    supplierRiskTrendChart.destroy();
+                    supplierRiskTrendChart = null;
+                }
+                
+                // Render empty import history
+                renderImportHistory();
+                
+                // Reset last update time
+                document.getElementById('last-update-time').textContent = 'Last Update: --';
+                
+                alert('All data has been cleared successfully.');
             } catch (error) {
-                alert('Failed to clear data: ' + error.message);
-                return;
+                console.error('Error clearing data:', error);
+                alert('Failed to clear data');
             }
-
-            // Clear data arrays first
-            allData = [];
-            filteredData = [];
-            importHistory = [];
-            
-            // Reset pagination
-            currentPage = 1;
-            
-            // Clear UI elements
-            document.getElementById('file-name').textContent = '';
-            document.getElementById('upload-progress').textContent = '';
-            document.getElementById('file-input').value = '';
-            
-            // Clear all filters and disable them
-            const filters = ['filter-lob', 'filter-program', 'filter-phase', 'filter-part-type', 'filter-status', 'filter-build-complete', 'filter-supplier', 'filter-fe-engineer', 'filter-dev-engineer'];
-            filters.forEach(filterId => {
-                const select = document.getElementById(filterId);
-                if (select) {
-                    select.value = '';
-                    select.disabled = true;
-                    select.innerHTML = '<option value="">All</option>';
-                }
-            });
-            document.getElementById('search-input').value = '';
-            
-            // Clear table
-            document.getElementById('table-header').innerHTML = '';
-            document.getElementById('table-body').innerHTML = '';
-            
-            // Reset stats to 0
-            document.getElementById('stat-total').textContent = '0';
-            document.getElementById('stat-green').textContent = '0';
-            document.getElementById('stat-yellow').textContent = '0';
-            document.getElementById('stat-red').textContent = '0';
-            
-            // Hide pagination
-            document.getElementById('pagination').style.display = 'none';
-            
-            // Show no data message
-            document.getElementById('no-data').style.display = 'block';
-            
-            // Hide charts section
-            document.getElementById('charts-section').style.display = 'none';
-            
-            // Clear charts
-            if (statusChart) {
-                statusChart.destroy();
-                statusChart = null;
-            }
-            if (barChart) {
-                barChart.destroy();
-                barChart = null;
-            }
-            if (statusByPartTypeChart) {
-                statusByPartTypeChart.destroy();
-                statusByPartTypeChart = null;
-            }
-            if (statusBySupplierChart) {
-                statusBySupplierChart.destroy();
-                statusBySupplierChart = null;
-            }
-            if (statusTrendChart) {
-                statusTrendChart.destroy();
-                statusTrendChart = null;
-            }
-            if (supplierRiskTrendChart) {
-                supplierRiskTrendChart.destroy();
-                supplierRiskTrendChart = null;
-            }
-            
-            // Render empty import history
-            renderImportHistory();
-            
-            // Reset last update time
-            document.getElementById('last-update-time').textContent = 'Last Update: --';
-            
-            alert('All data has been cleared successfully.');
         }
 
         function navigateToDetailPageByStatus(status) {

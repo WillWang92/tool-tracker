@@ -221,6 +221,11 @@
     </div>
 
     <script>
+        // API Configuration - Change this to your deployed Flask backend URL
+        const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:5000'
+            : 'https://your-flask-backend-url.com'; // Replace with your deployed backend URL
+
         let allData = [];
         let filteredData = [];
         let db;
@@ -268,64 +273,60 @@
             loadData();
         }).catch(error => {
             console.error('Failed to initialize IndexedDB:', error);
-            // Even if IndexedDB fails, try to load data from localStorage
+            // Even if IndexedDB fails, try to load data from backend API
             loadData();
         });
 
         async function loadData() {
             try {
-                let savedData = localStorage.getItem('toolingDashboardData');
-                let savedFilteredData = localStorage.getItem('toolingDashboardFilteredData');
+                // Load from backend API
+                const response = await fetch(`${API_BASE_URL}/api/records`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const payload = await response.json();
                 
-                // If localStorage is empty, try IndexedDB
-                if (!savedData || !savedFilteredData) {
-                    try {
-                        savedData = await getFromDB('allData');
-                        savedFilteredData = await getFromDB('filteredData');
-                    } catch (error) {
-                        console.error('Error loading from IndexedDB:', error);
-                    }
+                allData = payload.records;
+                // Use filteredData from localStorage if available, otherwise use allData
+                const savedFilteredData = localStorage.getItem('toolingDashboardFilteredData');
+                if (savedFilteredData) {
+                    filteredData = JSON.parse(savedFilteredData);
+                } else {
+                    filteredData = [...allData];
                 }
                 
-                if (savedData && savedFilteredData) {
-                    allData = typeof savedData === 'string' ? JSON.parse(savedData) : savedData;
-                    filteredData = typeof savedFilteredData === 'string' ? JSON.parse(savedFilteredData) : savedFilteredData;
-                    
-                    console.log('Loaded data:', allData.length, 'total records,', filteredData.length, 'filtered records');
-                    
-                    // Sort filteredData by tool number
-                    const headers = Object.keys(allData[0] || {});
-                    const toolColumn = headers.find(header => {
-                        const lowerHeader = header.toLowerCase();
-                        return lowerHeader.includes('tool') && (lowerHeader.includes('#') || lowerHeader.includes('number') || lowerHeader.includes('no'));
+                console.log('Loaded data:', allData.length, 'total records,', filteredData.length, 'filtered records');
+                
+                // Sort filteredData by tool number
+                const headers = Object.keys(allData[0] || {});
+                const toolColumn = headers.find(header => {
+                    const lowerHeader = header.toLowerCase();
+                    return lowerHeader.includes('tool') && (lowerHeader.includes('#') || lowerHeader.includes('number') || lowerHeader.includes('no'));
+                });
+                
+                if (toolColumn) {
+                    filteredData.sort((a, b) => {
+                        const aVal = a[toolColumn] || '';
+                        const bVal = b[toolColumn] || '';
+                        // Try to sort as numbers if possible
+                        const aNum = parseFloat(String(aVal).replace(/[^0-9.-]/g, ''));
+                        const bNum = parseFloat(String(bVal).replace(/[^0-9.-]/g, ''));
+                        if (!isNaN(aNum) && !isNaN(bNum)) {
+                            return aNum - bNum;
+                        }
+                        // Otherwise sort as strings
+                        return String(aVal).localeCompare(String(bVal));
                     });
-                    
-                    if (toolColumn) {
-                        filteredData.sort((a, b) => {
-                            const aVal = a[toolColumn] || '';
-                            const bVal = b[toolColumn] || '';
-                            // Try to sort as numbers if possible
-                            const aNum = parseFloat(String(aVal).replace(/[^0-9.-]/g, ''));
-                            const bNum = parseFloat(String(bVal).replace(/[^0-9.-]/g, ''));
-                            if (!isNaN(aNum) && !isNaN(bNum)) {
-                                return aNum - bNum;
-                            }
-                            // Otherwise sort as strings
-                            return String(aVal).localeCompare(String(bVal));
-                        });
-                    }
-                    
-                    if (headers.length > 0) {
-                        renderTable(headers);
-                    } else {
-                        document.getElementById('table-body').innerHTML = '<tr><td colspan="100" class="no-data">No data available</td></tr>';
-                    }
+                }
+                
+                if (headers.length > 0) {
+                    renderTable(headers);
                 } else {
-                    document.getElementById('table-body').innerHTML = '<tr><td colspan="100" class="no-data">No data available. Please upload data from the dashboard.</td></tr>';
+                    document.getElementById('table-body').innerHTML = '<tr><td colspan="100" class="no-data">No data available</td></tr>';
                 }
             } catch (error) {
-                console.error('Error loading data:', error);
-                document.getElementById('table-body').innerHTML = '<tr><td colspan="100" class="no-data">Error loading data</td></tr>';
+                console.error('Error loading data from API:', error);
+                document.getElementById('table-body').innerHTML = '<tr><td colspan="100" class="no-data">Error loading data from server. Please check connection.</td></tr>';
             }
         }
 
